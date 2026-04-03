@@ -1,0 +1,84 @@
+{
+  "partners": {
+    "partner_a": {
+      "name": "Partner A",
+      "label": "A"
+    },
+    "partner_b": {
+      "name": "Partner B",
+      "label": "B"
+    }
+  },
+  "income": {
+    "partner_a_net": 10000,
+    "partner_b_net": 10000,
+    "_comment": "Used for income_ratio / blended category share formulas. Contribution inflows are neutral (not part of compensation)."
+  },
+  "categories": {
+    "kids": { "label": "Kids", "icon": "👧", "share_formula": "fixed", "share": { "partner_a": 0.5, "partner_b": 0.5 } },
+    "food": {
+      "label": "Food",
+      "icon": "🛒",
+      "share_formula": "fixed",
+      "share": { "partner_a": 0.5, "partner_b": 0.5 }
+    },
+    "house": {
+      "label": "House",
+      "icon": "🏠",
+      "share_formula": "fixed",
+      "share": { "partner_a": 0.5, "partner_b": 0.5 }
+    },
+    "equal": {
+      "label": "Equal share",
+      "icon": "⚖️",
+      "share_formula": "fixed",
+      "share": { "partner_a": 0.5, "partner_b": 0.5 }
+    },
+    "other": {
+      "label": "Other / unclassified",
+      "icon": "❓",
+      "share_formula": "fixed",
+      "share": { "partner_a": 0.5, "partner_b": 0.5 }
+    }
+  },
+  "classification_rules": {
+    "kids": { "keywords": ["example_kids_store"], "case_sensitive": false },
+    "food": { "keywords": ["example_supermarket"], "case_sensitive": false },
+    "house": { "keywords": ["example_utility"], "case_sensitive": false },
+    "equal": { "keywords": ["example_equal_split_merchant"], "case_sensitive": false }
+  },
+  "accounts": {
+    "caixabank_common": {
+      "label": "CaixaBank shared",
+      "type": "shared",
+      "parser": "caixabank"
+    },
+    "revolut_joint": {
+      "label": "Revolut joint",
+      "type": "shared",
+      "parser": "revolut"
+    }
+  },
+  "bank_imports": {
+    "base_directory": "",
+    "sources": [
+      {
+        "id": "caixabank_joint",
+        "account_key": "caixabank_common",
+        "file": "tmp/input/your_export.xls",
+        "parser": "caixabank",
+        "layout": {
+          "sheet_index": 0,
+          "transaction_date_column": "f_valor"
+        }
+      },
+      {
+        "id": "revolut_joint",
+        "account_key": "revolut_joint",
+        "file": "tmp/input/your_export.csv",
+        "parser": "revolut",
+        "layout": { "type": "revolut_csv", "state_filter": "COMPLETED" }
+      }
+    ]
+  }
+}
