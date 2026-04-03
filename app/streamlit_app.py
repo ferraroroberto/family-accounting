@@ -70,7 +70,7 @@ def main() -> None:
 
     _render_sidebar()
 
-    tab_dash, tab_imp, tab_cfg = st.tabs(["dashboard", "import_data", "configuration"])
+    tab_dash, tab_imp, tab_cfg = st.tabs(["Dashboard", "Import data", "Configuration"])
 
     with tab_dash:
         dashboard.render()

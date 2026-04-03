@@ -56,7 +56,7 @@ def accent_gradient(n: int, base_hex: str | None = None) -> list[str]:
 
 def _load_df(conn: sqlite3.Connection) -> pd.DataFrame:
     return pd.read_sql_query(
-        "SELECT id, date, description, amount, category, direction, source, yyyymm, rule FROM transactions ORDER BY date, id",
+        "SELECT id, date, description, amount, category, direction, partner, source, yyyymm, rule FROM transactions ORDER BY date, id",
         conn,
     )
 
@@ -156,6 +156,7 @@ def _enrich_transactions_split(df: pd.DataFrame, cfg: dict) -> pd.DataFrame:
         "category",
         "rule",
         "direction",
+        "partner",
         "source",
         "yyyymm",
     ]
@@ -163,7 +164,7 @@ def _enrich_transactions_split(df: pd.DataFrame, cfg: dict) -> pd.DataFrame:
 
 
 def render() -> None:
-    st.header("dashboard")
+    st.header("Dashboard")
 
     cfg_path_st = st.session_state.get("cfg_path_exists", True)
     if not cfg_path_st:
@@ -185,8 +186,13 @@ def render() -> None:
         st.info("No transactions. Import data first.")
         return
 
-    expenses = df[df["amount"] < 0].copy()
+    # Spending = outflows excluding contributions
+    contributions_mask = df["category"] == "contribution" if "category" in df.columns else pd.Series(False, index=df.index)
+    expenses = df[(df["amount"] < 0) & ~contributions_mask].copy()
     expenses["amount_abs"] = -expenses["amount"]
+
+    # Contribution rows
+    contrib_df = df[contributions_mask].copy() if "category" in df.columns else pd.DataFrame()
 
     c1, c2, c3 = st.columns(3)
     with c1:
@@ -207,12 +213,16 @@ def render() -> None:
 
     st.subheader("Compensation share (ideal split vs 50/50 funding)")
     st.caption(
-        f"Each category uses the configured formula; compensation only includes **{comp_cat_labels}** outflows. "
-        f"Shares: **{pa}** (A) vs **{pb}** (B)."
+        f"Each category uses the configured formula; expense compensation includes **{comp_cat_labels}** outflows. "
+        f"Contributions are tracked separately. Shares: **{pa}** (A) vs **{pb}** (B)."
     )
-    ratio_cols = st.columns(len(COMPENSATION_CATEGORIES))
+
+    # Show kids, food, house cards + contributions card (replaces equal card)
+    display_cats = [c for c in COMPENSATION_CATEGORIES if c != "equal"]
+    ratio_cols = st.columns(len(display_cats) + 1)
     accent = _read_accent_hex()
-    for i, cat in enumerate(COMPENSATION_CATEGORIES):
+
+    for i, cat in enumerate(display_cats):
         sa, sb = share_for_category(cfg, cat)
         label = cfg.get("categories", {}).get(cat, {}).get("label", cat)
         with ratio_cols[i]:
@@ -228,6 +238,21 @@ def render() -> None:
             else:
                 st.caption("Cumulative: —")
 
+    # Contributions card
+    with ratio_cols[len(display_cats)]:
+        contrib_cum = float(rep["contributions_comp"].sum()) if not rep.empty and "contributions_comp" in rep.columns else 0.0
+        st.metric(
+            "Contributions",
+            _format_eu_decimal(contrib_cum) + " €",
+            help="Net compensation impact of partner fund transfers (A perspective). Negative = A contributed more.",
+        )
+        if not contrib_df.empty and "partner" in contrib_df.columns:
+            amt_a = float(contrib_df[contrib_df["partner"] == "partner_a"]["amount"].sum())
+            amt_b = float(contrib_df[contrib_df["partner"] == "partner_b"]["amount"].sum())
+            st.caption(f"A: {_format_eu_decimal(amt_a)} € · B: {_format_eu_decimal(amt_b)} €")
+        else:
+            st.caption("No contributions recorded")
+
     if not expenses.empty:
         cat_sum = expenses.groupby("category", as_index=False)["amount_abs"].sum()
         cat_sum = cat_sum.sort_values("amount_abs", ascending=False)
@@ -238,7 +263,7 @@ def render() -> None:
             cat_sum,
             names="category",
             values="amount_abs",
-            title="Spending by category",
+            title="Spending by category (contributions excluded)",
             color="category",
             color_discrete_map=cmap,
         )
@@ -249,15 +274,17 @@ def render() -> None:
         )
         st.plotly_chart(fig_pie, width="stretch")
 
-    st.subheader(f"Monthly compensation ({comp_cat_labels})")
+    st.subheader(f"Monthly compensation ({comp_cat_labels} + contributions)")
     st.caption(
         f"Positive **total** means **{pa}** owes **{pb}**; negative **total** means **{pb}** owes **{pa}** "
-        f"(Partner A perspective on 50/50 account funding)."
+        f"(Partner A perspective on 50/50 account funding). "
+        f"**contributions_comp**: negative = A funded more, positive = B funded more."
     )
     if not rep.empty:
         disp = rep.sort_values("month", ascending=False).copy()
         disp["month"] = disp["month"].map(_format_yyyymm)
         comp_cols_to_format = [f"{c}_comp" for c in COMPENSATION_CATEGORIES] + [
+            "contributions_comp",
             "total_comp",
             "total_comp_cumulative",
         ]

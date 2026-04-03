@@ -275,11 +275,15 @@ def reclassify_all(
     for row in rows:
         old_cat, old_dir, old_rule = row["category"], row["direction"], row["rule"]
         out = classify_fn(row["description"], row["amount"])
-        if len(out) == 3:
-            cat, direction, rule = out
+        if len(out) == 4:
+            cat, direction, rule, partner = out
+        elif len(out) == 3:
+            cat, direction, rule = out  # type: ignore[misc]
+            partner = None
         else:
             cat, direction = out  # type: ignore[misc]
             rule = "default"
+            partner = None
         new_categories[cat] += 1
         if cat != old_cat or direction != old_dir or (old_rule or "") != (rule or ""):
             changed += 1
@@ -289,8 +293,8 @@ def reclassify_all(
                 {"id": row["id"], "description": row["description"], "amount": row["amount"]}
             )
         conn.execute(
-            "UPDATE transactions SET category = ?, direction = ?, rule = ?, updated_at = ? WHERE id = ?",
-            (cat, direction, rule, now, row["id"]),
+            "UPDATE transactions SET category = ?, direction = ?, rule = ?, partner = ?, updated_at = ? WHERE id = ?",
+            (cat, direction, rule, partner, now, row["id"]),
         )
         updated += 1
     conn.commit()

@@ -60,7 +60,7 @@ def _finalize_keywords_with_stats(
 
 
 def render() -> None:
-    st.header("configuration")
+    st.header("Configuration")
 
     cfg_path = default_config_path()
     if not cfg_path.is_file():
@@ -176,17 +176,11 @@ def render() -> None:
             for cat, count in sorted(category_counts.items(), key=lambda x: -x[1]):
                 st.markdown(f"- **{cat}**: {count}")
 
-    with st.expander("Clear Streamlit cache only"):
-        if st.button("Clear cache", key="btn_clear_cache"):
-            clear_data_caches()
-            st.success("Cache cleared.")
-            st.rerun()
-
     st.divider()
     st.subheader("Transactions")
     st.caption(
-        "Same columns as on **dashboard** · filter by category, rule, direction, source, and date. "
-        "Up to 500 rows after filters (newest first)."
+        "Same columns as on **dashboard** · filter by category, rule, direction, source, "
+        "date range, and description. Up to 500 rows after filters (newest first)."
     )
 
     dbp_tx = default_db_path()
@@ -239,17 +233,32 @@ def render() -> None:
                 src_opts = _opt_all(df_tx["source"])
                 src_sel = st.selectbox("Source", src_opts, key="cfg_tx_source")
 
-            dr = st.date_input(
-                "Date range",
-                value=(d_min.date(), d_max.date()),
-                min_value=d_min.date(),
-                max_value=d_max.date(),
-                key="cfg_tx_date_range",
-            )
-            if isinstance(dr, tuple) and len(dr) == 2:
-                d0, d1 = dr[0], dr[1]
-            else:
-                d0 = d1 = dr
+            fd0, fd1, fdesc = st.columns([1, 1, 2])
+            with fd0:
+                d_start = st.date_input(
+                    "From date",
+                    value=d_min.date(),
+                    min_value=d_min.date(),
+                    max_value=d_max.date(),
+                    key="cfg_tx_date_from",
+                )
+            with fd1:
+                d_end = st.date_input(
+                    "To date",
+                    value=d_max.date(),
+                    min_value=d_min.date(),
+                    max_value=d_max.date(),
+                    key="cfg_tx_date_to",
+                )
+            with fdesc:
+                desc_filter = st.text_input(
+                    "Description contains",
+                    value="",
+                    key="cfg_tx_description",
+                    placeholder="Substring match (case-insensitive)",
+                )
+
+            d0, d1 = (d_start, d_end) if d_start <= d_end else (d_end, d_start)
 
             filtered = df_tx
             if cat_sel != "(All)":
@@ -262,6 +271,13 @@ def render() -> None:
                 filtered = filtered[filtered["direction"].astype(str) == dir_sel]
             if src_sel != "(All)":
                 filtered = filtered[filtered["source"].astype(str) == src_sel]
+            q = desc_filter.strip()
+            if q:
+                filtered = filtered[
+                    filtered["description"]
+                    .astype(str)
+                    .str.contains(q, case=False, na=False, regex=False)
+                ]
 
             fd = pd.to_datetime(filtered["date"], errors="coerce").dt.date
             filtered = filtered[(fd >= d0) & (fd <= d1)]

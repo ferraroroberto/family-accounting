@@ -64,7 +64,7 @@ def _show_reclass_summary(res: dict) -> None:
 
 
 def render() -> None:
-    st.header("import_data")
+    st.header("Import data")
 
     cfg_path = default_config_path()
     if not cfg_path.is_file():
