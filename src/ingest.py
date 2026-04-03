@@ -40,10 +40,11 @@ def load_and_parse_source(
         desc = (r["description"] or "").strip().lower()
         r["description"] = desc
         r["hash"] = transaction_hash(source_id, r["date"], r["amount"], desc)
-        cat, direction, rule = classify_full(desc, r["amount"], cfg)
+        cat, direction, rule, partner = classify_full(desc, r["amount"], cfg)
         r["category"] = cat
         r["direction"] = direction
         r["rule"] = rule
+        r["partner"] = partner
         r["manual_override"] = 0
     return rows
 

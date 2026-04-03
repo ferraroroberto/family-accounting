@@ -9,9 +9,9 @@ All personal data (partner names, income figures, classification keywords) live 
 ## Features
 
 - **Multi-source ingestion** — import CaixaBank `.xls`/`.xlsx` exports and Revolut `.csv` exports into a local SQLite database.
-- **Rule-based classification** — keyword matching assigns each transaction to a category (kids, food, house, equal, or other). Rules are edited live from the UI.
+- **Rule-based classification** — keyword matching assigns each transaction to a category (kids, food, house, equal, contribution, or other). Rules are edited live from the UI. Contribution detection uses trigger keywords + partner names + round-number amount check.
 - **Flexible share formulas** — per-category cost-sharing supports three modes: `fixed` percentage, `income_ratio` (derived from partner net incomes), and `blended` (fixed base + income-weighted variable).
-- **Monthly compensation report** — computes how much each partner owes the other each month, assuming the joint account is funded 50/50.
+- **Monthly compensation report** — computes how much each partner owes the other each month, assuming the joint account is funded 50/50. Includes a `contributions_comp` column for partner fund transfers.
 - **Reclassification** — re-run classification rules on all non-manually-overridden transactions in one click.
 - **Duplicate prevention** — SHA-256 hash per transaction prevents double-imports across overlapping date-range exports.
 
@@ -148,24 +148,40 @@ Each category defines a share formula:
   "food":  { "share_formula": "blended", "share_blended_fixed_base": 0.25, "share_blended_variable_weight": 0.5 },
   "house": { "share_formula": "fixed", "share": { "partner_a": 0.7, "partner_b": 0.3 } },
   "equal": { "share_formula": "fixed", "share": { "partner_a": 0.5, "partner_b": 0.5 } },
+  "contribution": { "share_formula": "fixed", "share": { "partner_a": 0.5, "partner_b": 0.5 } },
   "other": { "share_formula": "fixed", "share": { "partner_a": 0.5, "partner_b": 0.5 } }
 }
 ```
 
+The `contribution` category is special: it is excluded from the spending pie chart and from expense compensation. Its impact on the monthly balance is tracked separately via `contributions_comp`.
+
 ### `classification_rules`
 
-Keyword lists per category. Matching is substring-based. Priority order: `kids → food → house → equal → other`.
+Keyword lists per category. Matching is substring-based. Priority order: `contribution → kids → food → house → equal → other`.
 
 ```json
 "classification_rules": {
   "kids":  { "keywords": ["SCHOOL_NAME", "TOY_STORE"], "case_sensitive": false },
   "food":  { "keywords": ["SUPERMARKET_A"], "case_sensitive": false },
   "house": { "keywords": ["UTILITY_CO"], "case_sensitive": false },
-  "equal": { "keywords": ["STREAMING_SERVICE"], "case_sensitive": false }
+  "equal": { "keywords": ["STREAMING_SERVICE"], "case_sensitive": false },
+  "contribution": {
+    "trigger_keywords": ["traspaso", "transfer"],
+    "round_number_multiple": 100,
+    "case_sensitive": false
+  }
 }
 ```
 
-Keywords can be edited live from the **Configuration** tab in the UI.
+The `contribution` rule differs from keyword rules: a transaction matches when **all three** conditions hold:
+
+1. Description contains at least one `trigger_keyword` (e.g. `traspaso`, `transfer`).
+2. Description contains a word from a partner's name (derived from `partners.partner_a.name` / `partners.partner_b.name`).
+3. The amount is a round multiple of `round_number_multiple` (default 100, e.g. 100, 200, 500).
+
+The matched partner determines the compensation sign: partner A contributing → `contributions_comp` is negative (A funded more); partner B contributing → positive (B funded more).
+
+Other keyword rules (`kids`, `food`, `house`, `equal`) can be edited live from the **Configuration** tab in the UI.
 
 ### `accounts`
 
@@ -210,11 +226,11 @@ Maps account sources to local file paths for batch import:
 
 ### Dashboard
 
-- Summary metrics: total spending, transaction count, number of sources.
-- Configured share ratios per category (with cumulative compensation totals).
-- Pie chart of spending by category.
-- Monthly compensation bar chart and cumulative line chart.
-- Transaction table (last 500, newest first) enriched with ideal split columns (`% A`, `% B`, `total A`, `total B`, `net`).
+- Summary metrics: total spending (contributions excluded), transaction count, number of sources.
+- Configured share ratios for `kids`, `food`, `house` + a **Contributions** card showing net compensation impact and per-partner totals.
+- Pie chart of spending by category (**contributions excluded**).
+- Monthly compensation table with per-category columns, `contributions_comp`, `total_comp`, and `total_comp_cumulative`; plus bar and cumulative line charts.
+- Transaction table (last 500, newest first) enriched with ideal split columns (`% A`, `% B`, `total A`, `total B`, `net`, `partner`).
 
 ### Import Data
 
@@ -245,7 +261,7 @@ The SQLite database (`data/expenses.db`) contains two tables:
 | `description` | TEXT | Lowercase, space-joined description |
 | `amount` | REAL | Negative = expense, positive = income/contribution |
 | `balance` | REAL | Post-transaction balance (nullable) |
-| `category` | TEXT | `kids` \| `food` \| `house` \| `equal` \| `other` |
+| `category` | TEXT | `kids` \| `food` \| `house` \| `equal` \| `contribution` \| `other` |
 | `direction` | TEXT | `expense` \| `contribution` |
 | `partner` | TEXT | Nullable; for contribution attribution |
 | `manual_override` | INTEGER | `1` if manually reclassified (skipped on reclassify) |
@@ -290,11 +306,22 @@ amount_ideal_a   = total_month × partner_a_share
 amount_paid_a    = total_month / 2          (50/50 account funding)
 compensation_a   = amount_paid_a − amount_ideal_a
 
-# positive compensation_a → Partner A overpaid → Partner B owes Partner A
-# negative compensation_a → Partner A underpaid → Partner A owes Partner B
+# positive compensation_a → Partner A underpaid their share → Partner A owes Partner B
+# negative compensation_a → Partner A overpaid their share → Partner B owes Partner A
 ```
 
-`total_comp` per month = sum of compensation across all tracked categories (`kids`, `food`, `house`, `equal`). Contributions (positive-amount rows classified as `contribution`) are excluded from the compensation calculation.
+`total_comp` per month = sum of expense compensation across tracked categories (`kids`, `food`, `house`, `equal`) **plus** `contributions_comp`.
+
+### Contribution compensation
+
+Transactions classified as `contribution` (partner fund transfers) are excluded from expense compensation and the spending pie chart. Instead, they add a `contributions_comp` column:
+
+```
+partner_a contributes amount → contributions_comp -= amount  (A funded more → reduces A's debt)
+partner_b contributes amount → contributions_comp += amount  (B funded more → increases A's debt)
+```
+
+The matched partner is the one whose name appears in the transaction description alongside a trigger keyword (`traspaso`, `transfer`) and a round amount (multiple of 100).
 
 ---
 

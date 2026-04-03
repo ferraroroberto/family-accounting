@@ -12,7 +12,7 @@
   "income": {
     "partner_a_net": 10000,
     "partner_b_net": 10000,
-    "_comment": "Used for income_ratio / blended category share formulas. Contribution inflows are neutral (not part of compensation)."
+    "_comment": "Used for income_ratio / blended category share formulas. Contribution inflows are tracked separately, not as expenses."
   },
   "categories": {
     "kids": { "label": "Kids", "icon": "👧", "share_formula": "fixed", "share": { "partner_a": 0.5, "partner_b": 0.5 } },
@@ -34,6 +34,13 @@
       "share_formula": "fixed",
       "share": { "partner_a": 0.5, "partner_b": 0.5 }
     },
+    "contribution": {
+      "label": "Contribution",
+      "icon": "💸",
+      "share_formula": "fixed",
+      "share": { "partner_a": 0.5, "partner_b": 0.5 },
+      "_note": "Partner fund transfers into joint account. Excluded from spending charts; tracked separately in monthly compensation."
+    },
     "other": {
       "label": "Other / unclassified",
       "icon": "❓",
@@ -45,7 +52,13 @@
     "kids": { "keywords": ["example_kids_store"], "case_sensitive": false },
     "food": { "keywords": ["example_supermarket"], "case_sensitive": false },
     "house": { "keywords": ["example_utility"], "case_sensitive": false },
-    "equal": { "keywords": ["example_equal_split_merchant"], "case_sensitive": false }
+    "equal": { "keywords": ["example_equal_split_merchant"], "case_sensitive": false },
+    "contribution": {
+      "_comment": "Matched when description contains a trigger keyword AND a partner name AND the amount is a round multiple of round_number_multiple. Partner is inferred from which name appears. Examples: 'TRASPASO PARTNER_A 500', 'TRANSFER PARTNER_B 300'.",
+      "trigger_keywords": ["traspaso", "transfer"],
+      "round_number_multiple": 100,
+      "case_sensitive": false
+    }
   },
   "accounts": {
     "caixabank_common": {
