@@ -15,9 +15,16 @@ def _contributions_comp_for_month(contrib: pd.DataFrame, ym: str) -> float:
     """
     Net compensation impact of contribution transactions for a given month.
 
+    The joint account is funded 50/50. When a partner contributes an amount to
+    the joint account, only the excess above their ideal 50% share generates
+    compensation. For a contribution of X:
+      - ideal share = X / 2 (half should come from each partner)
+      - partner actually paid X, so they overpaid by X / 2
+      → compensation = X / 2 (not X)
+
     Convention (partner_a perspective, same as expense compensation):
-      - partner_a contributes → A funded more → reduces A's debt → negative
-      - partner_b contributes → B funded more → increases A's debt → positive
+      - partner_a contributes X → A overpaid by X/2 → reduces A's debt → -(X/2)
+      - partner_b contributes X → B overpaid by X/2 → increases A's debt → +(X/2)
     """
     if contrib.empty or "yyyymm" not in contrib.columns:
         return 0.0
@@ -28,7 +35,7 @@ def _contributions_comp_for_month(contrib: pd.DataFrame, ym: str) -> float:
     comp = 0.0
     for _, tx in m.iterrows():
         partner = str(tx["partner"]) if has_partner and not pd.isna(tx.get("partner")) else ""
-        amt = float(tx["amount"])
+        amt = float(tx["amount"]) / 2  # only the excess above the 50% ideal share counts
         if partner == "partner_a":
             comp -= amt
         elif partner == "partner_b":

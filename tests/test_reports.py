@@ -48,7 +48,7 @@ def test_monthly_report_shape(cfg: dict) -> None:
 
 
 def test_contributions_comp_partner_a(minimal_cfg: dict) -> None:
-    """A contributes 500 → contributions_comp should be -500 (reduces A's debt)."""
+    """A contributes 500 → contributions_comp should be -250 (only excess above 50% ideal counts)."""
     df = pd.DataFrame(
         [
             {
@@ -64,12 +64,12 @@ def test_contributions_comp_partner_a(minimal_cfg: dict) -> None:
     rep = monthly_compensation_report(df, minimal_cfg)
     assert not rep.empty
     row = rep.iloc[0]
-    assert row["contributions_comp"] == pytest.approx(-500.0)
-    assert row["total_comp"] == pytest.approx(-500.0)
+    assert row["contributions_comp"] == pytest.approx(-250.0)
+    assert row["total_comp"] == pytest.approx(-250.0)
 
 
 def test_contributions_comp_partner_b(minimal_cfg: dict) -> None:
-    """B contributes 300 → contributions_comp should be +300 (increases A's debt)."""
+    """B contributes 300 → contributions_comp should be +150 (only excess above 50% ideal counts)."""
     df = pd.DataFrame(
         [
             {
@@ -84,8 +84,8 @@ def test_contributions_comp_partner_b(minimal_cfg: dict) -> None:
     )
     rep = monthly_compensation_report(df, minimal_cfg)
     row = rep.iloc[0]
-    assert row["contributions_comp"] == pytest.approx(300.0)
-    assert row["total_comp"] == pytest.approx(300.0)
+    assert row["contributions_comp"] == pytest.approx(150.0)
+    assert row["total_comp"] == pytest.approx(150.0)
 
 
 def test_contributions_excluded_from_spending(minimal_cfg: dict) -> None:
@@ -100,8 +100,8 @@ def test_contributions_excluded_from_spending(minimal_cfg: dict) -> None:
     row = rep.iloc[0]
     # food_comp: -100 * (0.5 - 0.5) = 0 for equal split
     assert row["food_comp"] == pytest.approx(0.0)
-    # contributions_comp: -500 (partner_a contributed)
-    assert row["contributions_comp"] == pytest.approx(-500.0)
+    # contributions_comp: -250 (partner_a contributed 500, only excess above 50% = 250)
+    assert row["contributions_comp"] == pytest.approx(-250.0)
     assert "total_comp_cumulative" in rep.columns
 
 
@@ -115,6 +115,6 @@ def test_contributions_comp_mixed_month(minimal_cfg: dict) -> None:
     )
     rep = monthly_compensation_report(df, minimal_cfg)
     row = rep.iloc[0]
-    # -400 + 200 = -200
-    assert row["contributions_comp"] == pytest.approx(-200.0)
-    assert row["total_comp"] == pytest.approx(-200.0)
+    # -(400/2) + (200/2) = -200 + 100 = -100
+    assert row["contributions_comp"] == pytest.approx(-100.0)
+    assert row["total_comp"] == pytest.approx(-100.0)

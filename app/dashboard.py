@@ -1,4 +1,4 @@
-"""Dashboard tab: charts, transactions, monthly compensation."""
+"""Dashboard tab: charts and monthly compensation."""
 
 from __future__ import annotations
 
@@ -336,19 +336,3 @@ def render() -> None:
         st.plotly_chart(fig_cum, width="stretch")
     else:
         st.warning("Could not build compensation rows (check dates and categories).")
-
-    st.subheader("Transactions")
-    st.caption(
-        f"**net**: joint account is funded 50/50; ideal share uses category rules for expenses "
-        f"(contributions are neutral). Positive **net** ⇒ **{pa}** owes **{pb}**; "
-        f"negative **net** ⇒ **{pb}** owes **{pa}** (same convention as monthly compensation above)."
-    )
-    tx_disp = _enrich_transactions_split(
-        df.sort_values(["date", "id"], ascending=[False, False]).head(500),
-        cfg,
-    )
-    st.dataframe(
-        tx_disp,
-        width="stretch",
-        height=400,
-    )

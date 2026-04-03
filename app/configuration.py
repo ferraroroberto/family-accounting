@@ -179,7 +179,7 @@ def render() -> None:
     st.divider()
     st.subheader("Transactions")
     st.caption(
-        "Same columns as on **dashboard** · filter by category, rule, direction, source, "
+        "Filter by category, rule, direction, source, "
         "date range, and description. Up to 500 rows after filters (newest first)."
     )
 
@@ -190,6 +190,9 @@ def render() -> None:
         conn_tx = connect(dbp_tx)
         init_db(conn_tx)
         df_tx = _load_df(conn_tx)
+        df_raw = pd.read_sql_query(
+            "SELECT * FROM transactions ORDER BY date DESC, id DESC", conn_tx
+        )
         conn_tx.close()
 
         if df_tx.empty:
@@ -287,3 +290,32 @@ def render() -> None:
                 cfg_tx,
             )
             st.dataframe(tx_disp, width="stretch", height=400)
+
+            st.divider()
+            st.subheader("Raw data explorer")
+            st.caption(
+                "All database columns for the same filtered selection above. "
+                "Includes CaixaBank raw fields (`cb_*`), hash, and timestamps."
+            )
+
+            raw_filtered = df_raw
+            if cat_sel != "(All)":
+                raw_filtered = raw_filtered[raw_filtered["category"].astype(str) == cat_sel]
+            if rule_sel != "(All)":
+                raw_filtered = raw_filtered[
+                    raw_filtered["rule"].fillna("default").astype(str) == rule_sel
+                ]
+            if dir_sel != "(All)":
+                raw_filtered = raw_filtered[raw_filtered["direction"].astype(str) == dir_sel]
+            if src_sel != "(All)":
+                raw_filtered = raw_filtered[raw_filtered["source"].astype(str) == src_sel]
+            if q:
+                raw_filtered = raw_filtered[
+                    raw_filtered["description"]
+                    .astype(str)
+                    .str.contains(q, case=False, na=False, regex=False)
+                ]
+            fd_raw = pd.to_datetime(raw_filtered["date"], errors="coerce").dt.date
+            raw_filtered = raw_filtered[(fd_raw >= d0) & (fd_raw <= d1)]
+
+            st.dataframe(raw_filtered.head(500), width="stretch", height=400)
