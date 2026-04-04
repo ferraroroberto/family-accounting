@@ -338,3 +338,84 @@ def render() -> None:
         st.plotly_chart(fig_cum, width="stretch")
     else:
         st.warning("Could not build compensation rows (check dates and categories).")
+
+    # ── Rule summary table ──────────────────────────────────────────────────
+    st.subheader("Rule summary")
+    if not df.empty and "rule" in df.columns and "category" in df.columns:
+        rule_df = df.copy()
+        rule_df["rule"] = rule_df["rule"].fillna("default").astype(str).str.lower()
+        rule_df["category"] = rule_df["category"].fillna("").astype(str)
+
+        all_categories = sorted(rule_df["category"].unique().tolist())
+        fc1, fc2, fc3 = st.columns([1, 2, 1])
+        with fc1:
+            sel_cats = st.multiselect(
+                "Filter by category",
+                options=all_categories,
+                default=[],
+                key="rule_summary_cat_filter",
+            )
+        with fc2:
+            rule_kw = st.text_input(
+                "Filter by rule (keyword)",
+                value="",
+                key="rule_summary_rule_filter",
+            )
+        with fc3:
+            if "rule_summary_sort_asc" not in st.session_state:
+                st.session_state["rule_summary_sort_asc"] = True
+            st.write("")  # vertical alignment
+            if st.button(
+                "↑ Most negative first" if st.session_state["rule_summary_sort_asc"] else "↓ Most positive first",
+                key="rule_summary_sort_toggle",
+            ):
+                st.session_state["rule_summary_sort_asc"] = not st.session_state["rule_summary_sort_asc"]
+                st.rerun()
+        sort_asc = st.session_state["rule_summary_sort_asc"]
+
+        filtered = rule_df.copy()
+        if sel_cats:
+            filtered = filtered[filtered["category"].isin(sel_cats)]
+        if rule_kw.strip():
+            filtered = filtered[
+                filtered["rule"].str.contains(rule_kw.strip(), case=False, na=False)
+            ]
+
+        if not filtered.empty:
+            summary = (
+                filtered.groupby(["rule", "category"], as_index=False)
+                .agg(
+                    first_date=("date", "min"),
+                    last_date=("date", "max"),
+                    total_transactions=("amount", "count"),
+                    mean=("amount", "mean"),
+                    total_value=("amount", "sum"),
+                )
+                .sort_values("total_value", ascending=sort_asc)
+            )
+            summary["mean"] = summary["mean"].map(_format_eu_decimal)
+            summary["total_value"] = summary["total_value"].map(_format_eu_decimal)
+            summary = summary.rename(
+                columns={
+                    "rule": "Rule",
+                    "category": "Category",
+                    "first_date": "First date",
+                    "last_date": "Last date",
+                    "total_transactions": "Transactions",
+                    "mean": "Mean (€)",
+                    "total_value": "Total (€)",
+                }
+            )
+            st.dataframe(
+                summary,
+                width="stretch",
+                height=min(500, 40 + len(summary) * 35),
+                column_config={
+                    "Mean (€)": st.column_config.TextColumn(alignment="right"),
+                    "Total (€)": st.column_config.TextColumn(alignment="right"),
+                    "Transactions": st.column_config.NumberColumn(alignment="right"),
+                },
+                hide_index=True,
+            )
+        else:
+            st.info("No rules match the current filters.")
