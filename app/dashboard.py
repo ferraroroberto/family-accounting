@@ -347,7 +347,7 @@ def render() -> None:
         rule_df["category"] = rule_df["category"].fillna("").astype(str)
 
         all_categories = sorted(rule_df["category"].unique().tolist())
-        fc1, fc2, fc3 = st.columns([1, 2, 1])
+        fc1, fc2, fc3, fc4 = st.columns([1, 2, 1, 2])
         with fc1:
             sel_cats = st.multiselect(
                 "Filter by category",
@@ -371,6 +371,17 @@ def render() -> None:
             ):
                 st.session_state["rule_summary_sort_asc"] = not st.session_state["rule_summary_sort_asc"]
                 st.rerun()
+        with fc4:
+            _dates_parsed = pd.to_datetime(rule_df["date"], errors="coerce")
+            _min_date = _dates_parsed.min().date()
+            _max_date = _dates_parsed.max().date()
+            date_range = st.date_input(
+                "Filter by date range",
+                value=(_min_date, _max_date),
+                min_value=_min_date,
+                max_value=_max_date,
+                key="rule_summary_date_filter",
+            )
         sort_asc = st.session_state["rule_summary_sort_asc"]
 
         filtered = rule_df.copy()
@@ -380,6 +391,10 @@ def render() -> None:
             filtered = filtered[
                 filtered["rule"].str.contains(rule_kw.strip(), case=False, na=False)
             ]
+        if isinstance(date_range, (list, tuple)) and len(date_range) == 2:
+            _d0, _d1 = date_range
+            _fdates = pd.to_datetime(filtered["date"], errors="coerce")
+            filtered = filtered[(_fdates >= pd.Timestamp(_d0)) & (_fdates <= pd.Timestamp(_d1))]
 
         if not filtered.empty:
             summary = (
@@ -414,6 +429,21 @@ def render() -> None:
                     "Mean (€)": st.column_config.TextColumn(alignment="right"),
                     "Total (€)": st.column_config.TextColumn(alignment="right"),
                     "Transactions": st.column_config.NumberColumn(alignment="right"),
+                },
+                hide_index=True,
+            )
+
+            st.subheader("Filtered transactions")
+            enriched = _enrich_transactions_split(filtered, cfg)
+            _numeric_cols = [c for c in ("amount", "total A", "total B", "net") if c in enriched.columns]
+            _text_right_cols = [c for c in ("% A", "% B") if c in enriched.columns]
+            st.dataframe(
+                enriched,
+                width="stretch",
+                height=min(600, 40 + len(enriched) * 35),
+                column_config={
+                    **{c: st.column_config.NumberColumn(alignment="right", format="%.2f") for c in _numeric_cols},
+                    **{c: st.column_config.TextColumn(alignment="right") for c in _text_right_cols},
                 },
                 hide_index=True,
             )
