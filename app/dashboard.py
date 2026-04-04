@@ -163,6 +163,16 @@ def _enrich_transactions_split(df: pd.DataFrame, cfg: dict) -> pd.DataFrame:
     return out[[c for c in ordered if c in out.columns]]
 
 
+def _metric_card(label: str, value: str, caption_text: str) -> None:
+    """Compact metric card with smaller font for dense multi-column layouts."""
+    st.markdown(
+        f"<p style='font-size:0.8rem;margin:0 0 2px;color:rgba(250,250,250,0.6)'>{label}</p>"
+        f"<p style='font-size:1.15rem;font-weight:700;margin:0 0 4px;line-height:1.2'>{value}</p>",
+        unsafe_allow_html=True,
+    )
+    st.caption(caption_text)
+
+
 def render() -> None:
     st.header("Dashboard")
 
@@ -217,7 +227,7 @@ def render() -> None:
         f"Contributions are tracked separately. Shares: **{pa}** (A) vs **{pb}** (B)."
     )
 
-    # Show kids, food, house cards + contributions card (replaces equal card)
+    # Show kids, food, health, house cards + contributions card (replaces equal card)
     display_cats = [c for c in COMPENSATION_CATEGORIES if c != "equal"]
     ratio_cols = st.columns(len(display_cats) + 1)
     accent = _read_accent_hex()
@@ -226,32 +236,24 @@ def render() -> None:
         sa, sb = share_for_category(cfg, cat)
         label = cfg.get("categories", {}).get(cat, {}).get("label", cat)
         with ratio_cols[i]:
-            st.metric(
-                f"{label}",
-                f"{sa:.1%} A · {sb:.1%} B",
-                help=f"Ideal share of category spending for {pa} vs {pb}",
-            )
             col_name = f"{cat}_comp"
             if not rep.empty and col_name in rep.columns:
                 cum = float(rep[col_name].sum())
-                st.caption(f"Cumulative: {_format_eu_decimal(cum)} € (all months)")
+                cap = f"Cumulative: {_format_eu_decimal(cum)} € (all months)"
             else:
-                st.caption("Cumulative: —")
+                cap = "Cumulative: —"
+            _metric_card(label, f"{sa:.1%} A · {sb:.1%} B", cap)
 
     # Contributions card
     with ratio_cols[len(display_cats)]:
         contrib_cum = float(rep["contributions_comp"].sum()) if not rep.empty and "contributions_comp" in rep.columns else 0.0
-        st.metric(
-            "Contributions",
-            _format_eu_decimal(contrib_cum) + " €",
-            help="Net compensation impact of partner fund transfers (A perspective). Negative = A contributed more.",
-        )
         if not contrib_df.empty and "partner" in contrib_df.columns:
             amt_a = float(contrib_df[contrib_df["partner"] == "partner_a"]["amount"].sum())
             amt_b = float(contrib_df[contrib_df["partner"] == "partner_b"]["amount"].sum())
-            st.caption(f"A: {_format_eu_decimal(amt_a)} € · B: {_format_eu_decimal(amt_b)} €")
+            cap = f"A: {_format_eu_decimal(amt_a)} € · B: {_format_eu_decimal(amt_b)} €"
         else:
-            st.caption("No contributions recorded")
+            cap = "No contributions recorded"
+        _metric_card("Contributions", _format_eu_decimal(contrib_cum) + " €", cap)
 
     if not expenses.empty:
         cat_sum = expenses.groupby("category", as_index=False)["amount_abs"].sum()

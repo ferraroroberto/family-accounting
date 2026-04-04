@@ -11,7 +11,7 @@ from src.config_manager import default_config_path, load_config, save_config
 from src.data_loader import clear_data_caches, get_config
 from src.database import connect, default_db_path, init_db, reclassify_all
 
-_RULE_KEYS = ("kids", "food", "house", "equal")
+_RULE_KEYS = ("kids", "food", "health", "house", "equal")
 
 
 def _keywords_to_text(keywords: list[str] | None) -> str:

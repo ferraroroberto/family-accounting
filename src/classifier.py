@@ -48,8 +48,17 @@ def classify_contribution(
     if not rule:
         return False, None
 
-    trigger_kws = rule.get("trigger_keywords") or []
     case_sensitive = bool(rule.get("case_sensitive", False))
+
+    # description_keywords: positive-amount, description-only match → partner explicit in rule
+    if amount > 0:
+        for entry in rule.get("description_keywords") or []:
+            kw = entry.get("keyword") or ""
+            pk = entry.get("partner") or ""
+            if kw and pk and _match_keyword(description, kw, case_sensitive):
+                return True, pk
+
+    trigger_kws = rule.get("trigger_keywords") or []
     multiple = int(rule.get("round_number_multiple", 100))
 
     if not _is_round_number(amount, multiple):
@@ -77,7 +86,7 @@ def classify_description(description: str, config: dict[str, Any]) -> tuple[str,
     """
     desc = description or ""
     rules = config.get("classification_rules", {})
-    order = ["kids", "food", "house", "equal"]
+    order = ["kids", "food", "health", "house", "equal"]
     for cat in order:
         block = rules.get(cat) or {}
         keywords = block.get("keywords") or []

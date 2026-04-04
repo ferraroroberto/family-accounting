@@ -1,4 +1,4 @@
-"""Monthly compensation report (kids, food, house, equal outflows + contributions)."""
+"""Monthly compensation report (kids, food, health, house, equal outflows + contributions)."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ import pandas as pd
 
 from src.calculator import monthly_category_compensation
 
-COMPENSATION_CATEGORIES = ("kids", "food", "house", "equal")
+COMPENSATION_CATEGORIES = ("kids", "food", "health", "house", "equal")
 
 
 def _contributions_comp_for_month(contrib: pd.DataFrame, ym: str) -> float:
