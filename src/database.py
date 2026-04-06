@@ -319,6 +319,35 @@ def reclassify_all(
     }
 
 
+def backfill_account_type_from_config(
+    conn: sqlite3.Connection,
+    source_to_account_type: dict[str, str],
+) -> int:
+    """Backfill account_type for existing transactions based on their source.
+
+    For each source_id in the mapping, updates every transaction row whose
+    account_type does not already match the expected value.  This corrects
+    historical rows that were inserted before the account_type column existed
+    (and therefore defaulted to 'joint') as well as rows whose source has since
+    been reconfigured.
+
+    Returns the total number of rows updated.
+    """
+    if not source_to_account_type:
+        return 0
+    updated = 0
+    now = datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
+    for source_id, account_type in source_to_account_type.items():
+        cur = conn.execute(
+            "UPDATE transactions SET account_type = ?, updated_at = ?"
+            " WHERE source = ? AND (account_type IS NULL OR account_type != ?)",
+            (account_type, now, source_id, account_type),
+        )
+        updated += cur.rowcount
+    conn.commit()
+    return updated
+
+
 def last_data_update_iso(conn: sqlite3.Connection) -> str | None:
     """Latest activity: max of transaction updated_at and import_log timestamp."""
     u1 = conn.execute("SELECT MAX(updated_at) FROM transactions").fetchone()[0]
