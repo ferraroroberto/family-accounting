@@ -36,8 +36,8 @@ def test_import_and_classify_run(tmp_path: Path) -> None:
     init_db(conn)
     n = count_transactions(conn)
 
-    def _fn(desc: str, amt: float):
-        return classify_full(desc, amt, cfg)
+    def _fn(desc: str, amt: float, account_type: str = "joint"):
+        return classify_full(desc, amt, cfg, account_type)
 
     updated = reclassify_all(conn, _fn)
     conn.close()

@@ -59,19 +59,20 @@ def _finalize_keywords_with_stats(
     return sorted_kws, skipped_dupes, new_n
 
 
-def render() -> None:
-    st.header("Configuration")
-
+def _render_keyword_editor(
+    cfg: dict,
+    rules_key: str,
+    tab_prefix: str,
+    session_stats_key: str,
+    session_reclass_key: str,
+) -> None:
+    """Render keyword editor and Save button for a given rules_key (joint or personal)."""
     cfg_path = default_config_path()
-    if not cfg_path.is_file():
-        st.error("`config.json` not found.")
-        return
+    rules = cfg.get(rules_key) or {}
 
-    cfg = get_config()
-    rules = cfg.get("classification_rules") or {}
-
-    st.subheader("Classification keywords")
-    st.caption("Comma-separated keywords per rule. Save writes `config.json`, reclassifies the database, and refreshes cached config.")
+    st.caption(
+        f"Comma-separated keywords per rule. Save writes `config.json`, reclassifies the database, and refreshes cached config."
+    )
 
     defaults: dict[str, str] = {}
     for key in _RULE_KEYS:
@@ -86,12 +87,12 @@ def render() -> None:
             f"{label} (`{key}`)",
             value=defaults[key],
             height=120,
-            key=f"cfg_keywords_{key}",
+            key=f"{tab_prefix}_keywords_{key}",
         )
 
-    if st.button("Save and reclassify", type="primary", key="btn_cfg_save"):
+    if st.button("Save and reclassify", type="primary", key=f"btn_{tab_prefix}_save"):
         base = load_config(cfg_path)
-        cr = base.setdefault("classification_rules", {})
+        cr = base.setdefault(rules_key, {})
         stats: dict[str, dict[str, object]] = {}
         for key in _RULE_KEYS:
             prev_block = cr.get(key) or {}
@@ -109,29 +110,29 @@ def render() -> None:
         except Exception as e:
             st.error(str(e))
             return
-        st.session_state.last_keyword_save_stats = stats
+        st.session_state[session_stats_key] = stats
         clear_data_caches()
 
         dbp = default_db_path()
         if dbp.is_file():
             fresh = load_config(cfg_path)
 
-            def _fn(desc: str, amt: float):
-                return classify_full(desc, amt, fresh)
+            def _fn(desc: str, amt: float, account_type: str = "joint"):
+                return classify_full(desc, amt, fresh, account_type)
 
             conn = connect(dbp)
             init_db(conn)
             res = reclassify_all(conn, _fn)
             conn.close()
-            st.session_state.last_config_reclass = res
+            st.session_state[session_reclass_key] = res
         else:
-            st.session_state.last_config_reclass = None
+            st.session_state[session_reclass_key] = None
 
         st.success("Saved and reclassified.")
         st.rerun()
 
-    if st.session_state.get("last_keyword_save_stats"):
-        kw_stats = st.session_state.last_keyword_save_stats
+    if st.session_state.get(session_stats_key):
+        kw_stats = st.session_state[session_stats_key]
         cfg_labels = get_config()
         st.caption("Last save: keyword changes")
         for key in _RULE_KEYS:
@@ -152,8 +153,8 @@ def render() -> None:
                 f"- **{label}** (`{key}`): **{d['new']}** new · {dup_phrase}"
             )
 
-    if st.session_state.get("last_config_reclass"):
-        r = st.session_state.last_config_reclass
+    if st.session_state.get(session_reclass_key):
+        r = st.session_state[session_reclass_key]
         st.caption("Last save: reclassify summary")
         st.write(
             f"Touched **{r['rows_touched']}** rows · **{r['rows_changed']}** category/direction changes."
@@ -176,10 +177,47 @@ def render() -> None:
             for cat, count in sorted(category_counts.items(), key=lambda x: -x[1]):
                 st.markdown(f"- **{cat}**: {count}")
 
+
+def render() -> None:
+    st.header("Configuration")
+
+    cfg_path = default_config_path()
+    if not cfg_path.is_file():
+        st.error("`config.json` not found.")
+        return
+
+    cfg = get_config()
+
+    tab_joint, tab_personal = st.tabs(["Joint", "Personal"])
+
+    with tab_joint:
+        st.subheader("Classification keywords — Joint accounts")
+        _render_keyword_editor(
+            cfg,
+            rules_key="classification_rules",
+            tab_prefix="cfg_joint",
+            session_stats_key="last_keyword_save_stats_joint",
+            session_reclass_key="last_config_reclass_joint",
+        )
+
+    with tab_personal:
+        st.subheader("Classification keywords — Personal account")
+        st.caption(
+            "These rules apply **only** to transactions from personal accounts. "
+            "Compensation and share logic is **not** applied to personal transactions."
+        )
+        _render_keyword_editor(
+            cfg,
+            rules_key="personal_classification_rules",
+            tab_prefix="cfg_personal",
+            session_stats_key="last_keyword_save_stats_personal",
+            session_reclass_key="last_config_reclass_personal",
+        )
+
     st.divider()
     st.subheader("Transactions")
     st.caption(
-        "Filter by category, rule, direction, source, "
+        "Filter by account type, category, rule, direction, source, "
         "date range, and description. Up to 500 rows after filters (newest first)."
     )
 
@@ -204,8 +242,12 @@ def render() -> None:
             st.caption(
                 f"**net**: joint account is funded 50/50; ideal share uses category rules for expenses "
                 f"(contributions are neutral). Positive **net** ⇒ **{pa}** owes **{pb}**; "
-                f"negative **net** ⇒ **{pb}** owes **{pa}**."
+                f"negative **net** ⇒ **{pb}** owes **{pa}**. Split columns only shown for joint transactions."
             )
+
+            if "account_type" not in df_tx.columns:
+                df_tx["account_type"] = "joint"
+            df_tx["account_type"] = df_tx["account_type"].fillna("joint").astype(str)
 
             def _opt_all(values: pd.Series) -> list[str]:
                 u = sorted(
@@ -222,7 +264,18 @@ def render() -> None:
                 d_min = valid_dates.min().normalize()
                 d_max = valid_dates.max().normalize()
 
-            fc1, fc2, fc3, fc4 = st.columns(4)
+            # Account type selector (default joint)
+            acct_type_opts = _opt_all(df_tx["account_type"])
+            default_acct_idx = acct_type_opts.index("joint") if "joint" in acct_type_opts else 0
+
+            ft0, fc1, fc2, fc3, fc4 = st.columns(5)
+            with ft0:
+                acct_type_sel = st.selectbox(
+                    "Account type",
+                    acct_type_opts,
+                    index=default_acct_idx,
+                    key="cfg_tx_acct_type",
+                )
             with fc1:
                 cat_opts = _opt_all(df_tx["category"])
                 cat_sel = st.selectbox("Category", cat_opts, key="cfg_tx_category")
@@ -264,6 +317,8 @@ def render() -> None:
             d0, d1 = (d_start, d_end) if d_start <= d_end else (d_end, d_start)
 
             filtered = df_tx
+            if acct_type_sel != "(All)":
+                filtered = filtered[filtered["account_type"].astype(str) == acct_type_sel]
             if cat_sel != "(All)":
                 filtered = filtered[filtered["category"].astype(str) == cat_sel]
             if rule_sel != "(All)":
@@ -285,10 +340,13 @@ def render() -> None:
             fd = pd.to_datetime(filtered["date"], errors="coerce").dt.date
             filtered = filtered[(fd >= d0) & (fd <= d1)]
 
-            tx_disp = _enrich_transactions_split(
-                filtered.sort_values(["date", "id"], ascending=[False, False]).head(500),
-                cfg_tx,
-            )
+            sorted_filtered = filtered.sort_values(["date", "id"], ascending=[False, False]).head(500)
+            is_joint_view = (acct_type_sel == "joint")
+
+            if is_joint_view:
+                tx_disp = _enrich_transactions_split(sorted_filtered, cfg_tx)
+            else:
+                tx_disp = sorted_filtered
             st.dataframe(tx_disp, width="stretch", height=400)
 
             st.divider()
@@ -299,6 +357,9 @@ def render() -> None:
             )
 
             raw_filtered = df_raw
+            if "account_type" in df_raw.columns:
+                if acct_type_sel != "(All)":
+                    raw_filtered = raw_filtered[raw_filtered["account_type"].astype(str) == acct_type_sel]
             if cat_sel != "(All)":
                 raw_filtered = raw_filtered[raw_filtered["category"].astype(str) == cat_sel]
             if rule_sel != "(All)":

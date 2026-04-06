@@ -78,14 +78,16 @@ def classify_contribution(
     return False, None
 
 
-def classify_description(description: str, config: dict[str, Any]) -> tuple[str, str]:
+def classify_description(
+    description: str, config: dict[str, Any], rules_key: str = "classification_rules"
+) -> tuple[str, str]:
     """
     Return (category, matched_rule_keyword_lower_or_empty).
-    Priority: kids > food > house > equal > other.
+    Priority: kids > food > health > house > equal > other.
     Contribution detection (which needs amount) is handled in classify_full.
     """
     desc = description or ""
-    rules = config.get("classification_rules", {})
+    rules = config.get(rules_key, {})
     order = ["kids", "food", "health", "house", "equal"]
     for cat in order:
         block = rules.get(cat) or {}
@@ -110,18 +112,28 @@ def classify_amount_hint(amount: float, category: str) -> str:
 
 
 def classify_full(
-    description: str, amount: float, config: dict[str, Any]
+    description: str, amount: float, config: dict[str, Any], account_type: str = "joint"
 ) -> tuple[str, str, str, str | None]:
     """
     Return (category, direction, rule, partner_key).
-    Contribution check runs first (highest priority).
-    partner_key is 'partner_a' or 'partner_b' for contributions, None otherwise.
+
+    For personal accounts: uses personal_classification_rules, no contribution detection,
+    direction is 'expense' (outflow) or 'income' (inflow).
+
+    For joint accounts: contribution check runs first (highest priority), then
+    classification_rules. partner_key is 'partner_a' or 'partner_b' for contributions, None otherwise.
     """
+    if account_type == "personal":
+        cat, rule = classify_description(description, config, "personal_classification_rules")
+        direction = "expense" if amount < 0 else "income"
+        return cat, direction, rule or "default", None
+
+    # Joint account logic
     is_contrib, partner_key = classify_contribution(description, amount, config)
     if is_contrib:
         return "contribution", "contribution", "contribution", partner_key
 
-    cat, rule = classify_description(description, config)
+    cat, rule = classify_description(description, config, "classification_rules")
     direction = classify_amount_hint(amount, cat)
     if not rule:
         rule = "default"

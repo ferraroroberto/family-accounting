@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS transactions (
     manual_override INTEGER DEFAULT 0,
     yyyymm          TEXT,
     rule            TEXT DEFAULT 'default',
+    account_type    TEXT DEFAULT 'joint',
     extra_json      TEXT,
     cb_oficina          TEXT,
     cb_divisa           TEXT,
@@ -98,6 +99,14 @@ def _ensure_extra_json_column(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE transactions ADD COLUMN extra_json TEXT")
 
 
+def _ensure_account_type_column(conn: sqlite3.Connection) -> None:
+    cur = conn.execute("PRAGMA table_info(transactions)")
+    cols = {row[1] for row in cur.fetchall()}
+    if "account_type" not in cols:
+        conn.execute("ALTER TABLE transactions ADD COLUMN account_type TEXT DEFAULT 'joint'")
+        conn.execute("UPDATE transactions SET account_type = 'joint' WHERE account_type IS NULL")
+
+
 # Nullable CaixaBank-only columns (Revolut / compact layout leave NULL).
 _CB_DETAIL_COLS: tuple[tuple[str, str], ...] = (
     ("cb_oficina", "TEXT"),
@@ -149,6 +158,7 @@ def init_db(conn: sqlite3.Connection) -> None:
     conn.commit()
     _ensure_rule_column(conn)
     _ensure_extra_json_column(conn)
+    _ensure_account_type_column(conn)
     _ensure_caixabank_detail_columns(conn)
     conn.commit()
     ver = conn.execute("PRAGMA user_version").fetchone()[0]
@@ -186,14 +196,14 @@ def insert_transactions(
                 """
                 INSERT INTO transactions (
                     source, date, value_date, description, amount, balance,
-                    category, direction, partner, manual_override, yyyymm, rule, extra_json,
+                    category, direction, partner, manual_override, yyyymm, rule, account_type, extra_json,
                     cb_oficina, cb_divisa, cb_f_operacion, cb_f_valor,
                     cb_ingreso, cb_gasto, cb_saldo_pos, cb_saldo_neg,
                     cb_concepto_comun, cb_concepto_propio, cb_referencia1, cb_referencia2,
                     cb_cc1, cb_cc2, cb_cc3, cb_cc4, cb_cc5,
                     cb_cc6, cb_cc7, cb_cc8, cb_cc9, cb_cc10,
                     hash, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     r["source"],
@@ -208,6 +218,7 @@ def insert_transactions(
                     r.get("manual_override", 0),
                     r.get("yyyymm"),
                     r.get("rule", "default"),
+                    r.get("account_type", "joint"),
                     r.get("extra_json"),
                     r.get("cb_oficina"),
                     r.get("cb_divisa"),
@@ -261,7 +272,7 @@ def reclassify_all(
     """Re-run classifier on rows without manual_override. Returns counts and category changes."""
     cur = conn.execute(
         """
-        SELECT id, description, amount, manual_override, category, direction, rule
+        SELECT id, description, amount, manual_override, category, direction, rule, account_type
         FROM transactions WHERE manual_override = 0
         """
     )
@@ -274,7 +285,8 @@ def reclassify_all(
     now = datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
     for row in rows:
         old_cat, old_dir, old_rule = row["category"], row["direction"], row["rule"]
-        out = classify_fn(row["description"], row["amount"])
+        acct_type = row["account_type"] if row["account_type"] else "joint"
+        out = classify_fn(row["description"], row["amount"], acct_type)
         if len(out) == 4:
             cat, direction, rule, partner = out
         elif len(out) == 3:

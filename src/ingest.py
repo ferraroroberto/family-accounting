@@ -23,6 +23,15 @@ PARSERS = {
 }
 
 
+def _account_type_for_source(cfg: dict[str, Any], source_spec: dict[str, Any]) -> str:
+    """Return 'personal' or 'joint' for a source spec based on its account config."""
+    account_key = source_spec.get("account_key", "")
+    accounts = cfg.get("accounts", {})
+    account = accounts.get(account_key, {})
+    acct_type = account.get("type", "shared")
+    return "personal" if acct_type == "personal" else "joint"
+
+
 def load_and_parse_source(
     cfg: dict[str, Any],
     source_spec: dict[str, Any],
@@ -35,12 +44,14 @@ def load_and_parse_source(
     parser = PARSERS[parser_name]
     source_id = source_spec["id"]
     layout = source_spec.get("layout") or {}
+    account_type = _account_type_for_source(cfg, source_spec)
     rows = parser(path, source_id, layout)
     for r in rows:
         desc = (r["description"] or "").strip().lower()
         r["description"] = desc
         r["hash"] = transaction_hash(source_id, r["date"], r["amount"], desc)
-        cat, direction, rule, partner = classify_full(desc, r["amount"], cfg)
+        r["account_type"] = account_type
+        cat, direction, rule, partner = classify_full(desc, r["amount"], cfg, account_type)
         r["category"] = cat
         r["direction"] = direction
         r["rule"] = rule
