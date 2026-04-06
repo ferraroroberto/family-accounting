@@ -8,7 +8,14 @@ from typing import Any
 
 from src.classifier import classify_full
 from src.config_manager import load_config, resolve_path
-from src.database import connect, init_db, insert_transactions, log_import, transaction_hash
+from src.database import (
+    backfill_account_type_from_config,
+    connect,
+    init_db,
+    insert_transactions,
+    log_import,
+    transaction_hash,
+)
 from src.parsers.caixabank import parse_caixabank_file
 from src.parsers.revolut import parse_revolut_csv
 
@@ -30,6 +37,17 @@ def _account_type_for_source(cfg: dict[str, Any], source_spec: dict[str, Any]) -
     account = accounts.get(account_key, {})
     acct_type = account.get("type", "shared")
     return "personal" if acct_type == "personal" else "joint"
+
+
+def _build_source_account_type_map(cfg: dict[str, Any]) -> dict[str, str]:
+    """Return a mapping of source_id → account_type derived from the config."""
+    bi = cfg.get("bank_imports") or {}
+    sources = bi.get("sources") or []
+    return {
+        spec["id"]: _account_type_for_source(cfg, spec)
+        for spec in sources
+        if "id" in spec
+    }
 
 
 def load_and_parse_source(
@@ -69,6 +87,7 @@ def import_all_configured(
     sources = bi.get("sources") or []
     conn = connect(db_path)
     init_db(conn)
+    backfill_account_type_from_config(conn, _build_source_account_type_map(cfg))
     total_added = 0
     total_skipped = 0
     details: list[dict[str, Any]] = []
