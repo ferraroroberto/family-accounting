@@ -81,6 +81,12 @@
       "label": "Revolut joint",
       "type": "shared",
       "parser": "revolut"
+    },
+    "caixabank_personal": {
+      "label": "CaixaBank Personal",
+      "type": "personal",
+      "owner": "partner_a",
+      "parser": "caixabank"
     }
   },
   "bank_imports": {
@@ -102,7 +108,39 @@
         "file": "tmp/input/your_export.csv",
         "parser": "revolut",
         "layout": { "type": "revolut_csv", "state_filter": "COMPLETED" }
+      },
+      {
+        "id": "caixabank_personal",
+        "account_key": "caixabank_personal",
+        "file": "tmp/input/your_personal_export.xls",
+        "parser": "caixabank",
+        "layout": {
+          "sheet_index": 0,
+          "transaction_date_column": "f_valor"
+        }
       }
     ]
+  },
+  "personal_classification_rules": {
+    "kids": {
+      "keywords": [],
+      "case_sensitive": false
+    },
+    "food": {
+      "keywords": ["example_cafeteria", "example_restaurant"],
+      "case_sensitive": false
+    },
+    "health": {
+      "keywords": ["example_pharmacy"],
+      "case_sensitive": false
+    },
+    "house": {
+      "keywords": ["example_community_fees", "example_mortgage", "example_insurance"],
+      "case_sensitive": false
+    },
+    "equal": {
+      "keywords": ["example_saas_subscription", "example_travel", "example_transport"],
+      "case_sensitive": false
+    }
   }
 }

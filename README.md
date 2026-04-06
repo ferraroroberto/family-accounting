@@ -8,11 +8,12 @@ All personal data (partner names, income figures, classification keywords) live 
 
 ## Features
 
-- **Multi-source ingestion** — import CaixaBank `.xls`/`.xlsx` exports and Revolut `.csv` exports into a local SQLite database.
-- **Rule-based classification** — keyword matching assigns each transaction to a category (kids, food, health, house, equal, contribution, or other). Rules are edited live from the UI. Contribution detection supports two strategies: explicit `description_keywords` (positive amounts, partner declared in config) or trigger keywords + partner name + round-number amount check.
+- **Multi-source ingestion** — import CaixaBank `.xls`/`.xlsx` exports and Revolut `.csv` exports into a local SQLite database. Supports joint and personal account sources simultaneously.
+- **Joint / Personal account separation** — transactions carry an `account_type` dimension (`joint` or `personal`). Compensation and share logic applies only to joint accounts. Personal transactions are classified by a separate rule set (`personal_classification_rules`).
+- **Rule-based classification** — keyword matching assigns each transaction to a category (kids, food, health, house, equal, contribution, or other). Rules are edited live from the UI via dedicated **Joint** and **Personal** sub-tabs. Contribution detection supports two strategies: explicit `description_keywords` (positive amounts, partner declared in config) or trigger keywords + partner name + round-number amount check.
 - **Flexible share formulas** — per-category cost-sharing supports three modes: `fixed` percentage, `income_ratio` (derived from partner net incomes), and `blended` (fixed base + income-weighted variable).
 - **Monthly compensation report** — computes how much each partner owes the other each month, assuming the joint account is funded 50/50. Includes a `contributions_comp` column for partner fund transfers.
-- **Reclassification** — re-run classification rules on all non-manually-overridden transactions in one click.
+- **Reclassification** — re-run classification rules on all non-manually-overridden transactions in one click (account-type-aware).
 - **Duplicate prevention** — SHA-256 hash per transaction prevents double-imports across overlapping date-range exports.
 
 ---
@@ -158,7 +159,7 @@ The `contribution` category is special: it is excluded from the spending pie cha
 
 ### `classification_rules`
 
-Keyword lists per category. Matching is substring-based. Priority order: `contribution → kids → food → health → house → equal → other`.
+Keyword lists per category for **joint account** transactions. Matching is substring-based. Priority order: `contribution → kids → food → health → house → equal → other`.
 
 ```json
 "classification_rules": {
@@ -193,14 +194,29 @@ The matched partner determines the compensation sign: partner A contributing →
 
 Other keyword rules (`kids`, `food`, `house`, `equal`) can be edited live from the **Configuration** tab in the UI.
 
+### `personal_classification_rules`
+
+Same structure as `classification_rules` but applied **only to personal account transactions**. Compensation and share logic is never computed for personal transactions. Edit via the **Configuration → Personal** tab.
+
+```json
+"personal_classification_rules": {
+  "kids":   { "keywords": [], "case_sensitive": false },
+  "food":   { "keywords": ["example_cafeteria"], "case_sensitive": false },
+  "health": { "keywords": ["example_pharmacy"], "case_sensitive": false },
+  "house":  { "keywords": ["example_community_fees", "example_mortgage"], "case_sensitive": false },
+  "equal":  { "keywords": ["example_saas", "example_transport"], "case_sensitive": false }
+}
+```
+
 ### `accounts`
 
-Defines the logical accounts (used for labelling; parser is specified per import source):
+Defines the logical accounts. Accounts with `"type": "personal"` produce `account_type = "personal"` rows in the database; `"type": "shared"` produces `account_type = "joint"` rows.
 
 ```json
 "accounts": {
-  "caixabank_common": { "label": "CaixaBank shared", "type": "shared", "parser": "caixabank" },
-  "revolut_joint":   { "label": "Revolut joint",    "type": "shared", "parser": "revolut" }
+  "caixabank_common":   { "label": "CaixaBank shared",   "type": "shared",   "parser": "caixabank" },
+  "revolut_joint":      { "label": "Revolut joint",      "type": "shared",   "parser": "revolut" },
+  "caixabank_personal": { "label": "CaixaBank Personal", "type": "personal", "owner": "partner_a", "parser": "caixabank" }
 }
 ```
 
@@ -236,23 +252,24 @@ Maps account sources to local file paths for batch import:
 
 ### Dashboard
 
-- Summary metrics: total spending (contributions excluded), transaction count, number of sources.
-- Configured share ratios for `kids`, `food`, `health`, `house` + a **Contributions** card showing net compensation impact and per-partner totals.
-- Pie chart of spending by category (**contributions excluded**).
+- Summary metrics: total joint spending (contributions excluded), total transaction count, joint vs personal split.
+- Configured share ratios for `kids`, `food`, `health`, `house` + a **Contributions** card showing net compensation impact and per-partner totals. All compensation calculated on **joint** transactions only.
+- Pie chart of spending by category — joint accounts only (**contributions excluded**).
 - Monthly compensation table with per-category columns, `contributions_comp`, `total_comp`, and `total_comp_cumulative`; plus bar and cumulative line charts.
-- Transaction table (last 500, newest first) enriched with ideal split columns (`% A`, `% B`, `total A`, `total B`, `net`, `partner`).
+- **Rule summary** — aggregated stats by rule and category, with an **Account type** selector (default: `joint`) and date range filter. Filtered transactions shown below with split columns (joint) or plain view (personal).
 
 ### Import Data
 
-- **Import all files** — reads all configured `bank_imports.sources`, parses, classifies, and inserts into the database. Skips duplicates by hash.
-- **Reclassify all** — re-runs classification rules on every transaction without a manual override.
+- **Import all files** — reads all configured `bank_imports.sources`, parses, classifies (using joint or personal rules per source), and inserts into the database. Skips duplicates by hash.
+- **Reclassify all** — re-runs classification rules on every transaction without a manual override (account-type-aware).
 - **Preview** — parse a single source in memory without writing to the database.
 - Shows per-source and aggregate import statistics.
 
 ### Configuration
 
-- Edit classification keywords per category (comma-separated). Saves `config.json` and immediately reclassifies the database.
-- Filterable transaction table with the same enriched columns as the dashboard (category, rule, direction, source, date range filters).
+- **Joint** sub-tab: edit classification keywords for joint account categories. Saves `config.json` and immediately reclassifies the database.
+- **Personal** sub-tab: edit classification keywords for personal account categories (stored under `personal_classification_rules`).
+- Filterable transaction table with **Account type** selector (joint/personal), category, rule, direction, source, and date range filters. Enriched split columns shown for joint transactions only.
 
 ---
 
@@ -272,11 +289,12 @@ The SQLite database (`data/expenses.db`) contains two tables:
 | `amount` | REAL | Negative = expense, positive = income/contribution |
 | `balance` | REAL | Post-transaction balance (nullable) |
 | `category` | TEXT | `kids` \| `food` \| `health` \| `house` \| `equal` \| `contribution` \| `other` |
-| `direction` | TEXT | `expense` \| `contribution` |
+| `direction` | TEXT | `expense` \| `contribution` (joint) or `expense` \| `income` (personal) |
 | `partner` | TEXT | Nullable; for contribution attribution |
 | `manual_override` | INTEGER | `1` if manually reclassified (skipped on reclassify) |
 | `yyyymm` | TEXT | Pre-computed `YYYYMM` for fast grouping |
 | `rule` | TEXT | Matched keyword or `default` |
+| `account_type` | TEXT | `joint` or `personal` — derived from account config |
 | `extra_json` | TEXT | Reserved for future parser metadata |
 | `cb_*` columns | varies | CaixaBank raw fields (NULL for Revolut rows) |
 | `hash` | TEXT UNIQUE | SHA-256 deduplication key |

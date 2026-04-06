@@ -56,7 +56,7 @@ def accent_gradient(n: int, base_hex: str | None = None) -> list[str]:
 
 def _load_df(conn: sqlite3.Connection) -> pd.DataFrame:
     return pd.read_sql_query(
-        "SELECT id, date, description, amount, category, direction, partner, source, yyyymm, rule FROM transactions ORDER BY date, id",
+        "SELECT id, date, description, amount, category, direction, partner, source, yyyymm, rule, account_type FROM transactions ORDER BY date, id",
         conn,
     )
 
@@ -196,26 +196,34 @@ def render() -> None:
         st.info("No transactions. Import data first.")
         return
 
-    # Spending = outflows excluding contributions
-    contributions_mask = df["category"] == "contribution" if "category" in df.columns else pd.Series(False, index=df.index)
-    expenses = df[(df["amount"] < 0) & ~contributions_mask].copy()
+    # Joint-only data for compensation calculations
+    if "account_type" in df.columns:
+        joint_df = df[df["account_type"] == "joint"].copy()
+    else:
+        joint_df = df.copy()
+
+    # Spending = outflows excluding contributions (joint only)
+    contributions_mask = joint_df["category"] == "contribution" if "category" in joint_df.columns else pd.Series(False, index=joint_df.index)
+    expenses = joint_df[(joint_df["amount"] < 0) & ~contributions_mask].copy()
     expenses["amount_abs"] = -expenses["amount"]
 
-    # Contribution rows
-    contrib_df = df[contributions_mask].copy() if "category" in df.columns else pd.DataFrame()
+    # Contribution rows (joint only)
+    contrib_df = joint_df[contributions_mask].copy() if "category" in joint_df.columns else pd.DataFrame()
 
     c1, c2, c3 = st.columns(3)
     with c1:
-        st.metric("Total spending (outflows)", f"{expenses['amount_abs'].sum():,.2f} €")
+        st.metric("Total spending / joint (outflows)", f"{expenses['amount_abs'].sum():,.2f} €")
     with c2:
-        st.metric("Transactions", len(df))
+        st.metric("Total transactions", len(df))
     with c3:
-        st.metric("Sources", df["source"].nunique())
+        n_joint = len(joint_df)
+        n_personal = len(df) - n_joint
+        st.metric("Joint / Personal", f"{n_joint} / {n_personal}")
 
     pa = cfg.get("partners", {}).get("partner_a", {}).get("name", "Partner A")
     pb = cfg.get("partners", {}).get("partner_b", {}).get("name", "Partner B")
 
-    rep = monthly_compensation_report(df, cfg)
+    rep = monthly_compensation_report(joint_df, cfg)
 
     comp_cat_labels = " · ".join(
         cfg.get("categories", {}).get(c, {}).get("label", c) for c in COMPENSATION_CATEGORIES
@@ -265,7 +273,7 @@ def render() -> None:
             cat_sum,
             names="category",
             values="amount_abs",
-            title="Spending by category (contributions excluded)",
+            title="Spending by category — joint account (contributions excluded)",
             color="category",
             color_discrete_map=cmap,
         )
@@ -345,16 +353,30 @@ def render() -> None:
         rule_df = df.copy()
         rule_df["rule"] = rule_df["rule"].fillna("default").astype(str).str.lower()
         rule_df["category"] = rule_df["category"].fillna("").astype(str)
+        if "account_type" not in rule_df.columns:
+            rule_df["account_type"] = "joint"
+        rule_df["account_type"] = rule_df["account_type"].fillna("joint").astype(str)
+
+        acct_types = sorted(rule_df["account_type"].unique().tolist())
+        fa0, fa1, fa2, fa3, fa4 = st.columns([1, 1, 2, 1, 2])
+        with fa0:
+            sel_acct_type = st.selectbox(
+                "Account type",
+                options=acct_types,
+                index=acct_types.index("joint") if "joint" in acct_types else 0,
+                key="rule_summary_acct_type",
+            )
+        rule_df = rule_df[rule_df["account_type"] == sel_acct_type]
 
         all_categories = sorted(rule_df["category"].unique().tolist())
-        fc1, fc2, fc3, fc4 = st.columns([1, 2, 1, 2])
-        with fc1:
+        with fa1:
             sel_cats = st.multiselect(
                 "Filter by category",
                 options=all_categories,
                 default=[],
                 key="rule_summary_cat_filter",
             )
+        fc2, fc3, fc4 = fa2, fa3, fa4
         with fc2:
             rule_kw = st.text_input(
                 "Filter by rule (keyword)",
@@ -434,18 +456,28 @@ def render() -> None:
             )
 
             st.subheader("Filtered transactions")
-            enriched = _enrich_transactions_split(filtered, cfg)
-            _numeric_cols = [c for c in ("amount", "total A", "total B", "net") if c in enriched.columns]
-            _text_right_cols = [c for c in ("% A", "% B") if c in enriched.columns]
-            st.dataframe(
-                enriched,
-                width="stretch",
-                height=min(600, 40 + len(enriched) * 35),
-                column_config={
-                    **{c: st.column_config.NumberColumn(alignment="right", format="%.2f") for c in _numeric_cols},
-                    **{c: st.column_config.TextColumn(alignment="right") for c in _text_right_cols},
-                },
-                hide_index=True,
-            )
+            if sel_acct_type == "joint":
+                enriched = _enrich_transactions_split(filtered, cfg)
+                _numeric_cols = [c for c in ("amount", "total A", "total B", "net") if c in enriched.columns]
+                _text_right_cols = [c for c in ("% A", "% B") if c in enriched.columns]
+                st.dataframe(
+                    enriched,
+                    width="stretch",
+                    height=min(600, 40 + len(enriched) * 35),
+                    column_config={
+                        **{c: st.column_config.NumberColumn(alignment="right", format="%.2f") for c in _numeric_cols},
+                        **{c: st.column_config.TextColumn(alignment="right") for c in _text_right_cols},
+                    },
+                    hide_index=True,
+                )
+            else:
+                disp_cols = [c for c in ("id", "date", "description", "amount", "category", "rule", "direction", "source", "yyyymm") if c in filtered.columns]
+                st.dataframe(
+                    filtered[disp_cols].sort_values("date", ascending=False),
+                    width="stretch",
+                    height=min(600, 40 + len(filtered) * 35),
+                    column_config={"amount": st.column_config.NumberColumn(alignment="right", format="%.2f")},
+                    hide_index=True,
+                )
         else:
             st.info("No rules match the current filters.")

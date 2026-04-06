@@ -110,8 +110,8 @@ def render() -> None:
         cfg = load_config(cfg_path)
         dbp = default_db_path()
 
-        def _fn(desc: str, amt: float):
-            return classify_full(desc, amt, cfg)
+        def _fn(desc: str, amt: float, account_type: str = "joint"):
+            return classify_full(desc, amt, cfg, account_type)
 
         conn = connect(dbp)
         init_db(conn)
