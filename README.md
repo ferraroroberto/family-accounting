@@ -345,9 +345,11 @@ compensation_a   = amount_paid_a − amount_ideal_a
 Transactions classified as `contribution` (partner fund transfers) are excluded from expense compensation and the spending pie chart. Instead, they add a `contributions_comp` column:
 
 ```
-partner_a contributes amount → contributions_comp -= amount  (A funded more → reduces A's debt)
-partner_b contributes amount → contributions_comp += amount  (B funded more → increases A's debt)
+partner_a contributes amount → contributions_comp -= amount / 2  (A overpaid by half → reduces A's debt)
+partner_b contributes amount → contributions_comp += amount / 2  (B overpaid by half → increases A's debt)
 ```
+
+Only the excess above each partner's ideal 50 % share counts (the joint account is funded 50/50, so a contribution of X means each partner "should" have paid X/2; the contributing partner actually paid X, overpaying by X/2).
 
 The matched partner is the one whose name appears in the transaction description alongside a trigger keyword (`traspaso`, `transfer`) and a round amount (multiple of 100).
 
