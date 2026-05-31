@@ -92,7 +92,7 @@ def classify_description(
     for cat in order:
         block = rules.get(cat) or {}
         keywords = block.get("keywords") or []
-        case_sensitive = bool(block.get("case_sensitive", True))
+        case_sensitive = bool(block.get("case_sensitive", False))
         for kw in keywords:
             if _match_keyword(desc, kw, case_sensitive):
                 return cat, str(kw).strip().lower()

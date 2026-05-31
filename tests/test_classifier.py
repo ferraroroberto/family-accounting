@@ -128,3 +128,29 @@ def test_contribution_case_insensitive(minimal_config: dict) -> None:
     is_c, pk = classify_contribution("TRANSFER BOB 100", 100.0, minimal_config)
     assert is_c is True
     assert pk == "partner_b"
+
+
+def test_classify_description_default_case_insensitive() -> None:
+    """Rule block without explicit case_sensitive key must default to False.
+
+    Descriptions are lowercased at ingest (src/ingest.py:68), so a rule that
+    accidentally defaults to case_sensitive=True would silently fail to match
+    any uppercase keyword — the bug fixed in #3.
+    """
+    cfg = {
+        "classification_rules": {
+            "food": {
+                "keywords": ["mercadona"],
+                # deliberately omit case_sensitive — must behave as False
+            }
+        }
+    }
+    # Lowercased description (as produced by ingest) must match
+    cat, rule = classify_description("mercadona compra", cfg)
+    assert cat == "food"
+    assert rule == "mercadona"
+
+    # Mixed-case description must also match (belt-and-suspenders)
+    cat2, rule2 = classify_description("MERCADONA COMPRA", cfg)
+    assert cat2 == "food"
+    assert rule2 == "mercadona"
