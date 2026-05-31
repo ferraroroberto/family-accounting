@@ -14,6 +14,45 @@ from src.database import connect, default_db_path, init_db, reclassify_all
 _RULE_KEYS = ("kids", "food", "health", "house", "equal")
 
 
+def _apply_tx_filters(
+    df: pd.DataFrame,
+    acct_type_sel: str,
+    cat_sel: str,
+    rule_sel: str,
+    dir_sel: str,
+    src_sel: str,
+    q: str,
+    d0: object,
+    d1: object,
+) -> pd.DataFrame:
+    """Apply the standard transaction filter pipeline to *df* and return the filtered frame.
+
+    The ``account_type`` filter is skipped if the column is absent — this allows
+    the helper to be used for both the enriched view (which always has the column)
+    and the raw-data explorer (where the column may be absent on older databases).
+    """
+    out = df
+    if acct_type_sel != "(All)" and "account_type" in df.columns:
+        out = out[out["account_type"].astype(str) == acct_type_sel]
+    if cat_sel != "(All)":
+        out = out[out["category"].astype(str) == cat_sel]
+    if rule_sel != "(All)":
+        out = out[out["rule"].fillna("default").astype(str) == rule_sel]
+    if dir_sel != "(All)":
+        out = out[out["direction"].astype(str) == dir_sel]
+    if src_sel != "(All)":
+        out = out[out["source"].astype(str) == src_sel]
+    if q:
+        out = out[
+            out["description"]
+            .astype(str)
+            .str.contains(q, case=False, na=False, regex=False)
+        ]
+    fd = pd.to_datetime(out["date"], errors="coerce").dt.date
+    out = out[(fd >= d0) & (fd <= d1)]
+    return out
+
+
 def _keywords_to_text(keywords: list[str] | None) -> str:
     if not keywords:
         return ""
@@ -315,31 +354,11 @@ def render() -> None:
                 )
 
             d0, d1 = (d_start, d_end) if d_start <= d_end else (d_end, d_start)
-
-            filtered = df_tx
-            if acct_type_sel != "(All)":
-                filtered = filtered[filtered["account_type"].astype(str) == acct_type_sel]
-            if cat_sel != "(All)":
-                filtered = filtered[filtered["category"].astype(str) == cat_sel]
-            if rule_sel != "(All)":
-                filtered = filtered[
-                    filtered["rule"].fillna("default").astype(str) == rule_sel
-                ]
-            if dir_sel != "(All)":
-                filtered = filtered[filtered["direction"].astype(str) == dir_sel]
-            if src_sel != "(All)":
-                filtered = filtered[filtered["source"].astype(str) == src_sel]
             q = desc_filter.strip()
-            if q:
-                filtered = filtered[
-                    filtered["description"]
-                    .astype(str)
-                    .str.contains(q, case=False, na=False, regex=False)
-                ]
 
-            fd = pd.to_datetime(filtered["date"], errors="coerce").dt.date
-            filtered = filtered[(fd >= d0) & (fd <= d1)]
-
+            filtered = _apply_tx_filters(
+                df_tx, acct_type_sel, cat_sel, rule_sel, dir_sel, src_sel, q, d0, d1
+            )
             sorted_filtered = filtered.sort_values(["date", "id"], ascending=[False, False]).head(500)
             is_joint_view = (acct_type_sel == "joint")
 
@@ -356,27 +375,7 @@ def render() -> None:
                 "Includes CaixaBank raw fields (`cb_*`), hash, and timestamps."
             )
 
-            raw_filtered = df_raw
-            if "account_type" in df_raw.columns:
-                if acct_type_sel != "(All)":
-                    raw_filtered = raw_filtered[raw_filtered["account_type"].astype(str) == acct_type_sel]
-            if cat_sel != "(All)":
-                raw_filtered = raw_filtered[raw_filtered["category"].astype(str) == cat_sel]
-            if rule_sel != "(All)":
-                raw_filtered = raw_filtered[
-                    raw_filtered["rule"].fillna("default").astype(str) == rule_sel
-                ]
-            if dir_sel != "(All)":
-                raw_filtered = raw_filtered[raw_filtered["direction"].astype(str) == dir_sel]
-            if src_sel != "(All)":
-                raw_filtered = raw_filtered[raw_filtered["source"].astype(str) == src_sel]
-            if q:
-                raw_filtered = raw_filtered[
-                    raw_filtered["description"]
-                    .astype(str)
-                    .str.contains(q, case=False, na=False, regex=False)
-                ]
-            fd_raw = pd.to_datetime(raw_filtered["date"], errors="coerce").dt.date
-            raw_filtered = raw_filtered[(fd_raw >= d0) & (fd_raw <= d1)]
-
+            raw_filtered = _apply_tx_filters(
+                df_raw, acct_type_sel, cat_sel, rule_sel, dir_sel, src_sel, q, d0, d1
+            )
             st.dataframe(raw_filtered.head(500), width="stretch", height=400)
