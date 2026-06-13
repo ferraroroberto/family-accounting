@@ -11,6 +11,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
+from src.config_manager import partner_names
 from src.data_loader import get_config
 from src.calculator import share_for_category, share_for_transaction_row, net_ideal_vs_joint_50_50
 from src.database import connect, default_db_path, init_db
@@ -220,8 +221,7 @@ def render() -> None:
         n_personal = len(df) - n_joint
         st.metric("Joint / Personal", f"{n_joint} / {n_personal}")
 
-    pa = cfg.get("partners", {}).get("partner_a", {}).get("name", "Partner A")
-    pb = cfg.get("partners", {}).get("partner_b", {}).get("name", "Partner B")
+    pa, pb = partner_names(cfg)
 
     rep = monthly_compensation_report(joint_df, cfg)
 

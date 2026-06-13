@@ -5,7 +5,7 @@ from __future__ import annotations
 import streamlit as st
 
 from app import configuration, dashboard, import_data
-from src.config_manager import default_config_path
+from src.config_manager import default_config_path, partner_names
 from src.data_loader import get_config
 from src.database import (
     connect,
@@ -25,8 +25,7 @@ def _render_sidebar() -> None:
     if cfg_path.is_file():
         try:
             cfg = get_config()
-            pa = cfg.get("partners", {}).get("partner_a", {}).get("name", "Partner A")
-            pb = cfg.get("partners", {}).get("partner_b", {}).get("name", "Partner B")
+            pa, pb = partner_names(cfg)
             st.sidebar.caption(f"{pa} · {pb}")
         except Exception:
             pass

@@ -6,10 +6,11 @@ import pandas as pd
 import streamlit as st
 
 from app.dashboard import _enrich_transactions_split, _load_df
-from src.classifier import classify_full
-from src.config_manager import default_config_path, load_config, save_config
+from src.config_manager import default_config_path, load_config, partner_names, save_config
 from src.data_loader import clear_data_caches, get_config
-from src.database import connect, default_db_path, init_db, reclassify_all
+from src.database import connect, default_db_path, init_db
+from src.ingest import reclassify_database
+
 
 _RULE_KEYS = ("kids", "food", "health", "house", "equal")
 
@@ -155,15 +156,7 @@ def _render_keyword_editor(
         dbp = default_db_path()
         if dbp.is_file():
             fresh = load_config(cfg_path)
-
-            def _fn(desc: str, amt: float, account_type: str = "joint"):
-                return classify_full(desc, amt, fresh, account_type)
-
-            conn = connect(dbp)
-            init_db(conn)
-            res = reclassify_all(conn, _fn)
-            conn.close()
-            st.session_state[session_reclass_key] = res
+            st.session_state[session_reclass_key] = reclassify_database(fresh)
         else:
             st.session_state[session_reclass_key] = None
 
@@ -276,8 +269,7 @@ def render() -> None:
             st.info("No transactions. Import data first.")
         else:
             cfg_tx = get_config()
-            pa = cfg_tx.get("partners", {}).get("partner_a", {}).get("name", "Partner A")
-            pb = cfg_tx.get("partners", {}).get("partner_b", {}).get("name", "Partner B")
+            pa, pb = partner_names(cfg_tx)
             st.caption(
                 f"**net**: joint account is funded 50/50; ideal share uses category rules for expenses "
                 f"(contributions are neutral). Positive **net** ⇒ **{pa}** owes **{pb}**; "

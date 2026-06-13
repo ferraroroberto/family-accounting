@@ -11,9 +11,11 @@ from src.config_manager import load_config, resolve_path
 from src.database import (
     backfill_account_type_from_config,
     connect,
+    default_db_path,
     init_db,
     insert_transactions,
     log_import,
+    reclassify_all,
     transaction_hash,
 )
 from src.parsers.caixabank import parse_caixabank_file
@@ -124,3 +126,25 @@ def import_all_configured(
         "categories_total": dict(sorted(categories_total.items())),
         "directions_total": dict(sorted(directions_total.items())),
     }
+
+
+def reclassify_database(
+    cfg: dict[str, Any],
+    db_path: Path | None = None,
+) -> dict[str, Any]:
+    """Apply *cfg* classification rules to all non-override rows in the database.
+
+    Builds the classifier closure, manages the connection lifecycle, and returns
+    the ``reclassify_all`` result dict (``rows_touched``, ``rows_changed``,
+    ``transitions``, ``transition_rows``, ``category_counts``).
+    """
+    path = db_path or default_db_path()
+
+    def _fn(desc: str, amt: float, account_type: str = "joint"):
+        return classify_full(desc, amt, cfg, account_type)
+
+    conn = connect(path)
+    init_db(conn)
+    result = reclassify_all(conn, _fn)
+    conn.close()
+    return result
