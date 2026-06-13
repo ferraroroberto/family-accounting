@@ -5,7 +5,7 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
-from src.data_loader import clear_data_caches, get_config
+from app.data_loader import clear_data_caches, get_config
 from src.config_manager import default_config_path, load_config, resolve_path
 from src.ingest import import_all_configured, load_and_parse_source, reclassify_database
 

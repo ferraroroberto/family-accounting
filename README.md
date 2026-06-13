@@ -27,6 +27,7 @@ family-accounting/
 │   ├── dashboard.py            # Dashboard tab: charts and transaction table
 │   ├── import_data.py          # Import tab: ingest bank files, reclassify
 │   ├── configuration.py        # Configuration tab: edit keywords, view transactions
+│   ├── data_loader.py          # Streamlit-cached config helpers
 │   └── .streamlit/
 │       └── config.toml         # theme (dark, blue accent)
 │
@@ -34,7 +35,6 @@ family-accounting/
 │   ├── calculator.py           # share formulas and compensation math
 │   ├── classifier.py           # keyword-based transaction classifier
 │   ├── config_manager.py       # load / validate / save config.json
-│   ├── data_loader.py          # Streamlit-cached config helpers
 │   ├── database.py             # SQLite schema, queries, migrations
 │   ├── ingest.py               # orchestrate parse → classify → insert
 │   ├── logger.py               # shared logging setup
