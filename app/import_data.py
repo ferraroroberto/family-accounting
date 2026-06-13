@@ -6,10 +6,8 @@ import pandas as pd
 import streamlit as st
 
 from src.data_loader import clear_data_caches, get_config
-from src.classifier import classify_full
 from src.config_manager import default_config_path, load_config, resolve_path
-from src.database import connect, default_db_path, init_db, reclassify_all
-from src.ingest import import_all_configured, load_and_parse_source
+from src.ingest import import_all_configured, load_and_parse_source, reclassify_database
 
 
 def _show_import_summary(res: dict) -> None:
@@ -107,16 +105,8 @@ def render() -> None:
     st.subheader("Reclassify")
     st.caption("Apply `config.json` rules to rows without a manual override.")
     if st.button("Reclassify all", key="btn_reclass"):
-        cfg = load_config(cfg_path)
-        dbp = default_db_path()
-
-        def _fn(desc: str, amt: float, account_type: str = "joint"):
-            return classify_full(desc, amt, cfg, account_type)
-
-        conn = connect(dbp)
-        init_db(conn)
-        res = reclassify_all(conn, _fn)
-        conn.close()
+        cfg_for_reclass = load_config(cfg_path)
+        res = reclassify_database(cfg_for_reclass)
         clear_data_caches()
         st.session_state.last_reclass_summary = res
         st.success(

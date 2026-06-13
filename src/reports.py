@@ -7,6 +7,7 @@ from typing import Any
 import pandas as pd
 
 from src.calculator import monthly_category_compensation
+from src.config_manager import partner_names
 
 COMPENSATION_CATEGORIES = ("kids", "food", "health", "house", "equal")
 
@@ -84,8 +85,7 @@ def monthly_compensation_report(
     months = sorted(d["yyyymm"].dropna().unique())
 
     rows: list[dict[str, Any]] = []
-    pa_name = config.get("partners", {}).get("partner_a", {}).get("name", "Partner A")
-    pb_name = config.get("partners", {}).get("partner_b", {}).get("name", "Partner B")
+    pa_name, pb_name = partner_names(config)
 
     for ym in months:
         row: dict[str, Any] = {"month": ym}

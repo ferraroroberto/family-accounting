@@ -63,3 +63,10 @@ def resolve_path(cfg: dict[str, Any], relative: str) -> Path:
     if base:
         return (root / base / relative).resolve()
     return (root / relative).resolve()
+
+
+def partner_names(cfg: dict[str, Any]) -> tuple[str, str]:
+    """Return ``(partner_a_name, partner_b_name)`` from config, with fallbacks."""
+    pa = cfg.get("partners", {}).get("partner_a", {}).get("name", "Partner A")
+    pb = cfg.get("partners", {}).get("partner_b", {}).get("name", "Partner B")
+    return pa, pb
