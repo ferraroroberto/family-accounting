@@ -47,6 +47,7 @@ family-accounting/
 │   ├── test_caixabank_xlsx.py
 │   ├── test_classifier.py
 │   ├── test_configuration_keywords.py
+│   ├── test_database.py
 │   ├── test_integration.py
 │   ├── test_parsers.py
 │   └── test_reports.py
@@ -72,12 +73,11 @@ family-accounting/
 
 ```bash
 python -m venv .venv
-# Windows
-.venv\Scripts\activate
-# macOS / Linux
-source .venv/bin/activate
 
-pip install -r requirements.txt
+# Windows
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+# macOS / Linux
+./.venv/bin/python -m pip install -r requirements.txt
 ```
 
 ### Configure
@@ -103,8 +103,8 @@ See [`config.example.json`](config.example.json) for the full schema with annota
 # Windows — double-click or run:
 launch_app.bat
 
-# Any platform:
-PYTHONPATH=. python -m streamlit run app/streamlit_app.py --browser.gatherUsageStats=false
+# macOS / Linux:
+PYTHONPATH=. ./.venv/bin/python -m streamlit run app/streamlit_app.py --browser.gatherUsageStats=false
 ```
 
 ---
