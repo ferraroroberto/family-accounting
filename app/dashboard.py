@@ -11,8 +11,8 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
+from app.data_loader import get_config
 from src.config_manager import partner_names
-from src.data_loader import get_config
 from src.calculator import share_for_category, share_for_transaction_row, net_ideal_vs_joint_50_50
 from src.database import connect, default_db_path, init_db
 from src.reports import COMPENSATION_CATEGORIES, monthly_compensation_report

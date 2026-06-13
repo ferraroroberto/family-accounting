@@ -1,4 +1,4 @@
-"""Cached helpers for Streamlit."""
+"""Streamlit-cached config helpers for the UI package."""
 
 from __future__ import annotations
 

@@ -5,8 +5,8 @@ from __future__ import annotations
 import streamlit as st
 
 from app import configuration, dashboard, import_data
+from app.data_loader import get_config
 from src.config_manager import default_config_path, partner_names
-from src.data_loader import get_config
 from src.database import (
     connect,
     default_db_path,

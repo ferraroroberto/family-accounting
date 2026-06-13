@@ -6,8 +6,8 @@ import pandas as pd
 import streamlit as st
 
 from app.dashboard import _enrich_transactions_split, _load_df
+from app.data_loader import clear_data_caches, get_config
 from src.config_manager import default_config_path, load_config, partner_names, save_config
-from src.data_loader import clear_data_caches, get_config
 from src.database import connect, default_db_path, init_db
 from src.ingest import reclassify_database
 
