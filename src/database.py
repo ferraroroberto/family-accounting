@@ -286,16 +286,7 @@ def reclassify_all(
     for row in rows:
         old_cat, old_dir, old_rule = row["category"], row["direction"], row["rule"]
         acct_type = row["account_type"] if row["account_type"] else "joint"
-        out = classify_fn(row["description"], row["amount"], acct_type)
-        if len(out) == 4:
-            cat, direction, rule, partner = out
-        elif len(out) == 3:
-            cat, direction, rule = out  # type: ignore[misc]
-            partner = None
-        else:
-            cat, direction = out  # type: ignore[misc]
-            rule = "default"
-            partner = None
+        cat, direction, rule, partner = classify_fn(row["description"], row["amount"], acct_type)
         new_categories[cat] += 1
         if cat != old_cat or direction != old_dir or (old_rule or "") != (rule or ""):
             changed += 1
