@@ -5,7 +5,7 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
-from app.dashboard import _enrich_transactions_split, _load_df
+from app._tx_view import enrich_transactions_split, load_transactions_df
 from app.data_loader import clear_data_caches, get_config
 from src.config_manager import default_config_path, load_config, partner_names, save_config
 from src.database import connect, default_db_path, init_db
@@ -259,7 +259,7 @@ def render() -> None:
     else:
         conn_tx = connect(dbp_tx)
         init_db(conn_tx)
-        df_tx = _load_df(conn_tx)
+        df_tx = load_transactions_df(conn_tx)
         df_raw = pd.read_sql_query(
             "SELECT * FROM transactions ORDER BY date DESC, id DESC", conn_tx
         )
@@ -355,7 +355,7 @@ def render() -> None:
             is_joint_view = (acct_type_sel == "joint")
 
             if is_joint_view:
-                tx_disp = _enrich_transactions_split(sorted_filtered, cfg_tx)
+                tx_disp = enrich_transactions_split(sorted_filtered, cfg_tx)
             else:
                 tx_disp = sorted_filtered
             st.dataframe(tx_disp, width="stretch", height=400)

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import re
-import sqlite3
 from pathlib import Path
 
 import pandas as pd
@@ -11,9 +10,10 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
+from app._tx_view import enrich_transactions_split, load_transactions_df
 from app.data_loader import get_config
 from src.config_manager import partner_names
-from src.calculator import share_for_category, share_for_transaction_row, net_ideal_vs_joint_50_50
+from src.calculator import share_for_category
 from src.database import connect, default_db_path, init_db
 from src.reports import COMPENSATION_CATEGORIES, monthly_compensation_report
 
@@ -53,13 +53,6 @@ def accent_gradient(n: int, base_hex: str | None = None) -> list[str]:
         b = int(b0 + (255 - b0) * t * 0.85)
         out.append(_rgb_to_hex(r, g, b))
     return out
-
-
-def _load_df(conn: sqlite3.Connection) -> pd.DataFrame:
-    return pd.read_sql_query(
-        "SELECT id, date, description, amount, category, direction, partner, source, yyyymm, rule, account_type FROM transactions ORDER BY date, id",
-        conn,
-    )
 
 
 def _format_yyyymm(ym: str | int | float) -> str:
@@ -109,61 +102,6 @@ def _format_eu_decimal(value: object) -> str:
     return f"-{body}" if neg else body
 
 
-def _enrich_transactions_split(df: pd.DataFrame, cfg: dict) -> pd.DataFrame:
-    """Add ideal split vs 50/50 joint funding columns (same convention as monthly compensation)."""
-    if df.empty:
-        return df
-
-    pct_a: list[float] = []
-    pct_b: list[float] = []
-    total_a: list[float] = []
-    total_b: list[float] = []
-    net: list[float] = []
-    for _, row in df.iterrows():
-        amt = float(row["amount"])
-        cat = str(row.get("category") or "other")
-        direction = str(row.get("direction") or "expense")
-        sa, sb = share_for_transaction_row(cfg, cat, direction)
-        pct_a.append(sa)
-        pct_b.append(sb)
-        abs_amt = abs(amt)
-        if amt < 0:
-            total_a.append(round(abs_amt * sa, 2))
-            total_b.append(round(abs_amt * sb, 2))
-        else:
-            total_a.append(round(amt * sa, 2))
-            total_b.append(round(amt * sb, 2))
-        net.append(round(net_ideal_vs_joint_50_50(amt, sa), 2))
-    out = df.copy()
-    out["% A"] = [f"{x:.1%}" for x in pct_a]
-    out["% B"] = [f"{x:.1%}" for x in pct_b]
-    out["total A"] = total_a
-    out["total B"] = total_b
-    out["net"] = net
-    if "description" in out.columns:
-        out["description"] = out["description"].astype(str).str.lower()
-    if "rule" in out.columns:
-        out["rule"] = out["rule"].fillna("default").astype(str).str.lower()
-    ordered = [
-        "id",
-        "date",
-        "description",
-        "amount",
-        "% A",
-        "% B",
-        "total A",
-        "total B",
-        "net",
-        "category",
-        "rule",
-        "direction",
-        "partner",
-        "source",
-        "yyyymm",
-    ]
-    return out[[c for c in ordered if c in out.columns]]
-
-
 def _metric_card(label: str, value: str, caption_text: str) -> None:
     """Compact metric card with smaller font for dense multi-column layouts."""
     st.markdown(
@@ -190,7 +128,7 @@ def render() -> None:
 
     conn = connect(dbp)
     init_db(conn)
-    df = _load_df(conn)
+    df = load_transactions_df(conn)
     conn.close()
 
     if df.empty:
@@ -347,6 +285,11 @@ def render() -> None:
     else:
         st.warning("Could not build compensation rows (check dates and categories).")
 
+    _render_rule_summary(df, cfg)
+
+
+def _render_rule_summary(df: pd.DataFrame, cfg: dict) -> None:
+    """Render the Rule summary filter UI, aggregated table, and filtered transactions."""
     # ── Rule summary table ──────────────────────────────────────────────────
     st.subheader("Rule summary")
     if not df.empty and "rule" in df.columns and "category" in df.columns:
@@ -457,7 +400,7 @@ def render() -> None:
 
             st.subheader("Filtered transactions")
             if sel_acct_type == "joint":
-                enriched = _enrich_transactions_split(filtered, cfg)
+                enriched = enrich_transactions_split(filtered, cfg)
                 _numeric_cols = [c for c in ("amount", "total A", "total B", "net") if c in enriched.columns]
                 _text_right_cols = [c for c in ("% A", "% B") if c in enriched.columns]
                 st.dataframe(
