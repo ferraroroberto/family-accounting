@@ -1,0 +1,95 @@
+%% docs/architecture.mmd — family-accounting's own internal structure.
+%% Hand-authored, not generated (companion to ferraroroberto/fleet-config#256's
+%% fleet-wide convention: every repo carries a hand-authored diagram of its own
+%% internal shape, since there is no structured source to crawl it from — the
+%% same reason a `.fleet.toml` `description` field is hand-written). Update
+%% this diagram in the same PR as any material structural change (a module
+%% added/moved/renamed, a new parser, a new table/column, a new UI tab).
+
+flowchart TB
+  LAUNCH["launch_app.bat / streamlit run"] --> ENTRY
+
+  subgraph appui["app/ — Streamlit UI (no business logic)"]
+    ENTRY["streamlit_app.py\nsidebar + st.tabs() routing"]
+    DASH["dashboard.py\nDashboard tab: metrics, pie chart,\nmonthly compensation table + charts"]
+    IMPORTDATA["import_data.py\nImport tab: run imports, reclassify, preview"]
+    CONFIGTAB["configuration.py\nConfiguration tab: edit keywords,\nfilterable transaction table"]
+    LOADER["data_loader.py\n@st.cache_data config + cache-clear helpers"]
+    TXVIEW["_tx_view.py\nload + enrich transactions with\nideal-vs-actual split columns"]
+  end
+  ENTRY --> DASH
+  ENTRY --> IMPORTDATA
+  ENTRY --> CONFIGTAB
+  DASH --> LOADER
+  DASH --> TXVIEW
+  IMPORTDATA --> LOADER
+  CONFIGTAB --> LOADER
+  CONFIGTAB --> TXVIEW
+
+  subgraph corelogic["src/ — business logic (no Streamlit import allowed)"]
+    CFGMGR["config_manager.py\nload / validate (jsonschema) / save config.json\nresolve_path, project_root, partner_names"]
+    INGEST["ingest.py\norchestrate parse -> classify -> insert;\nimport_all_configured, reclassify_database"]
+    CLASSIFIER["classifier.py\nkeyword matching -> category + rule\n(joint vs personal_classification_rules)"]
+    CALC["calculator.py\nshare formulas: fixed / income_ratio / blended;\nmonthly_category_compensation"]
+    REPORTS["reports.py\nmonthly_compensation_report\n(pandas roll-up incl. contributions_comp)"]
+    DB["database.py\nSQLite schema, connect/init_db,\ninsert + query helpers, dedup by hash"]
+    LOGGER["logger.py\nshared logging setup"]
+    subgraph parsers["parsers/"]
+      CAIXA["caixabank.py\nauto-detect header row,\nwide/compact XLS(X) layouts"]
+      REVOLUT["revolut.py\nRevolut CSV, filters State==COMPLETED"]
+    end
+  end
+
+  TXVIEW --> CALC
+  LOADER --> CFGMGR
+  IMPORTDATA --> CFGMGR
+  IMPORTDATA --> INGEST
+  CONFIGTAB --> CFGMGR
+  CONFIGTAB --> DB
+  CONFIGTAB --> INGEST
+  DASH --> CFGMGR
+  DASH --> CALC
+  DASH --> DB
+  DASH --> REPORTS
+  ENTRY --> CFGMGR
+  ENTRY --> DB
+
+  INGEST --> CLASSIFIER
+  INGEST --> CFGMGR
+  INGEST --> DB
+  INGEST --> CAIXA
+  INGEST --> REVOLUT
+  INGEST --> LOGGER
+  DB --> CFGMGR
+  REPORTS --> CALC
+  REPORTS --> CFGMGR
+
+  CFGFILE[("config.json\n(gitignored — personal data;\nconfig.example.json is the neutral template)")]
+  CFGMGR <--> CFGFILE
+
+  BANKFILES[("tmp/input/*.xls(x) / *.csv\n(gitignored bank exports)")]
+  CAIXA --> BANKFILES
+  REVOLUT --> BANKFILES
+
+  SQLITEDB[("data/expenses.db\n(gitignored SQLite: transactions, import_log)")]
+  DB <--> SQLITEDB
+
+  subgraph tests["tests/ — pytest"]
+    TESTFILES["test_calculator · test_classifier · test_database ·\ntest_parsers · test_caixabank_xlsx ·\ntest_configuration_keywords · test_integration · test_reports"]
+  end
+  TESTFILES -.-> corelogic
+  TESTFILES -.->|skip if config.json /\ntmp/input/ absent| CFGFILE
+  TESTFILES -.-> BANKFILES
+
+  subgraph ext["External dependencies"]
+    STREAMLIT["streamlit"]
+    PANDAS["pandas"]
+    PLOTLY["plotly"]
+    XLPARSE["xlrd / openpyxl"]
+    JSONSCHEMA["jsonschema"]
+  end
+  appui --> STREAMLIT
+  DASH --> PLOTLY
+  corelogic --> PANDAS
+  CAIXA --> XLPARSE
+  CFGMGR --> JSONSCHEMA
