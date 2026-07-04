@@ -17,3 +17,7 @@ Canonical instructions for AI coding agents working in this repository. Claude C
 ## This repository
 Streamlit app for tracking shared household expenses between two partners and computing monthly compensation balances.
 See `README.md` for setup, layout, and usage.
+
+## Internal architecture
+
+[`docs/architecture.mmd`](docs/architecture.mmd) is a hand-authored Mermaid diagram of this repo's own internal structure (the `app/` UI package, the `src/` business logic, the two bank parsers, `config.json`/`data/expenses.db` as data stores, `tests/`) — the per-repo counterpart to `ferraroroberto/fleet-config`'s fleet-wide `/system-map`. Update it in the same PR as any material structural change (a module added/moved/renamed, a new parser, a new table/column, a new UI tab) — same anti-staleness contract as a `.fleet.toml` `description` field. It is not auto-generated and not covered by the `pytest` suite.
