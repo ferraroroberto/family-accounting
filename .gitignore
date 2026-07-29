@@ -212,3 +212,5 @@ __marimo__/
 # Sensitive data
 config.json
 data/*.db
+# Launcher scratch (ephemeral images/logs written by the tray launcher)
+.launcher-tmp/
