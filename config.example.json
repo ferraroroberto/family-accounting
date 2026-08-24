@@ -87,15 +87,32 @@
       "type": "personal",
       "owner": "partner_a",
       "parser": "caixabank"
+    },
+    "revolut_personal": {
+      "label": "Revolut Personal",
+      "type": "personal",
+      "owner": "partner_a",
+      "parser": "revolut"
     }
   },
   "bank_imports": {
-    "base_directory": "",
+    "_comment": "base_directory may be relative to the project root or an absolute path (e.g. a synced cloud folder), so exports can be imported where they land. Each source 'file' may be a plain name or a glob — with a glob the newest match by modification time wins, so dated exports need no config edit.",
+    "base_directory": "tmp/input",
     "sources": [
       {
         "id": "caixabank_joint",
         "account_key": "caixabank_common",
-        "file": "tmp/input/your_export.xls",
+        "file": "caixabank_joint_export_2*.xls",
+        "parser": "caixabank",
+        "layout": {
+          "sheet_index": 0,
+          "transaction_date_column": "f_valor"
+        }
+      },
+      {
+        "id": "caixabank_personal",
+        "account_key": "caixabank_personal",
+        "file": "caixabank_personal_export_2*.xls",
         "parser": "caixabank",
         "layout": {
           "sheet_index": 0,
@@ -105,19 +122,16 @@
       {
         "id": "revolut_joint",
         "account_key": "revolut_joint",
-        "file": "tmp/input/your_export.csv",
+        "file": "joint_account-statement_*.csv",
         "parser": "revolut",
         "layout": { "type": "revolut_csv", "state_filter": "COMPLETED" }
       },
       {
-        "id": "caixabank_personal",
-        "account_key": "caixabank_personal",
-        "file": "tmp/input/your_personal_export.xls",
-        "parser": "caixabank",
-        "layout": {
-          "sheet_index": 0,
-          "transaction_date_column": "f_valor"
-        }
+        "id": "revolut_personal",
+        "account_key": "revolut_personal",
+        "file": "personal_account-statement_*.csv",
+        "parser": "revolut",
+        "layout": { "type": "revolut_csv", "state_filter": "COMPLETED" }
       }
     ]
   },
