@@ -8,11 +8,102 @@ import streamlit as st
 from app._tx_view import enrich_transactions_split, load_transactions_df
 from app.data_loader import clear_data_caches, get_config
 from src.config_manager import default_config_path, load_config, partner_names, save_config
-from src.database import connect, default_db_path, init_db
+from src.database import (
+    clear_manual_override,
+    connect,
+    default_db_path,
+    init_db,
+    list_manual_overrides,
+    set_manual_override,
+)
 from src.ingest import reclassify_database
 
 
 _RULE_KEYS = ("kids", "food", "health", "house", "equal")
+_ALL_CATEGORIES = ("kids", "food", "health", "house", "equal", "contribution", "other")
+
+
+def _render_manual_override(candidates: pd.DataFrame) -> None:
+    """Pin one transaction to a category so reclassification leaves it alone.
+
+    For corrections the keywords cannot express — most often an internal transfer
+    between the two joint accounts, which looks exactly like a partner contribution
+    and would otherwise be counted twice.
+    """
+    st.subheader("Manual override")
+    st.caption(
+        "Pin a single transaction to a category. Pinned rows are skipped by every "
+        "future reclassification, so the correction survives keyword edits. "
+        "Pick from the filtered rows above."
+    )
+
+    dbp = default_db_path()
+    if candidates.empty:
+        st.info("No rows in the current filter to override.")
+    else:
+        opts = candidates.head(200)
+        labels = {
+            int(r.id): f"#{int(r.id)} · {r.date} · {float(r.amount):,.2f} · {str(r.description)[:60]}"
+            for r in opts.itertuples()
+        }
+        chosen = st.selectbox(
+            "Transaction",
+            options=list(labels),
+            format_func=lambda i: labels[i],
+            key="cfg_override_tx",
+        )
+        oc1, oc2, oc3 = st.columns([2, 2, 1])
+        with oc1:
+            new_cat = st.selectbox("Set category to", _ALL_CATEGORIES, key="cfg_override_cat")
+        with oc2:
+            partner = st.selectbox(
+                "Attribute to partner",
+                ["(none)", "partner_a", "partner_b"],
+                key="cfg_override_partner",
+                help="Only used when the category is 'contribution'.",
+                disabled=new_cat != "contribution",
+            )
+        with oc3:
+            st.write("")
+            apply_it = st.button("Pin", type="primary", key="cfg_override_apply")
+
+        if apply_it:
+            conn = connect(dbp)
+            ok = set_manual_override(
+                conn, int(chosen), new_cat,
+                None if partner == "(none)" else partner,
+            )
+            conn.close()
+            if ok:
+                clear_data_caches()
+                st.success(f"Transaction #{chosen} pinned to `{new_cat}`.")
+                st.rerun()
+            else:
+                st.error(f"Transaction #{chosen} not found.")
+
+    conn = connect(dbp)
+    overrides = list_manual_overrides(conn)
+    conn.close()
+    if not overrides:
+        st.caption("No manual overrides in place.")
+        return
+
+    st.caption(f"{len(overrides)} pinned row{'s' if len(overrides) != 1 else ''}")
+    for o in overrides:
+        c1, c2 = st.columns([6, 1])
+        with c1:
+            partner_note = f" → {o['partner']}" if o["partner"] else ""
+            st.markdown(
+                f"- `#{o['id']}` **{o['date']}** · `{o['amount']:,.2f}` · "
+                f"**{o['category']}**{partner_note} — {str(o['description'])[:70]}"
+            )
+        with c2:
+            if st.button("Release", key=f"cfg_override_clear_{o['id']}"):
+                conn = connect(dbp)
+                clear_manual_override(conn, int(o["id"]))
+                conn.close()
+                clear_data_caches()
+                st.rerun()
 
 
 def _apply_tx_filters(
@@ -359,6 +450,9 @@ def render() -> None:
             else:
                 tx_disp = sorted_filtered
             st.dataframe(tx_disp, width="stretch", height=400)
+
+            st.divider()
+            _render_manual_override(sorted_filtered)
 
             st.divider()
             st.subheader("Raw data explorer")

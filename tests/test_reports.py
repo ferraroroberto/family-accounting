@@ -118,3 +118,55 @@ def test_contributions_comp_mixed_month(minimal_cfg: dict) -> None:
     # -(400/2) + (200/2) = -200 + 100 = -100
     assert row["contributions_comp"] == pytest.approx(-100.0)
     assert row["total_comp"] == pytest.approx(-100.0)
+
+
+def _refund_cfg() -> dict:
+    """70/30 house so a refund visibly changes the compensation (a 50/50 share never can)."""
+    return {
+        "partners": {
+            "partner_a": {"name": "Alice", "label": "A"},
+            "partner_b": {"name": "Bob", "label": "B"},
+        },
+        "income": {"partner_a_net": 10000, "partner_b_net": 10000},
+        "categories": {
+            "house": {"share_formula": "fixed", "share": {"partner_a": 0.7, "partner_b": 0.3}},
+            "equal": {"share_formula": "fixed", "share": {"partner_a": 0.5, "partner_b": 0.5}},
+        },
+        "classification_rules": {},
+        "accounts": {},
+    }
+
+
+def test_refund_nets_against_the_spend_it_reverses() -> None:
+    """A credit back to a category reduces that category's compensation.
+
+    1000 spent at 70/30 => A ideal -700, A paid -500, comp +200.
+    With 400 refunded the real spend is 600 => comp +120, not +200.
+    """
+    spend_only = pd.DataFrame(
+        [{"date": "2026-03-05", "amount": -1000.0, "category": "house", "source": "t"}]
+    )
+    with_refund = pd.DataFrame(
+        [
+            {"date": "2026-03-05", "amount": -1000.0, "category": "house", "source": "t"},
+            {"date": "2026-03-20", "amount": 400.0, "category": "house", "source": "t"},
+        ]
+    )
+    cfg = _refund_cfg()
+    assert monthly_compensation_report(spend_only, cfg)["house_comp"].iloc[0] == pytest.approx(200.0)
+    assert monthly_compensation_report(with_refund, cfg)["house_comp"].iloc[0] == pytest.approx(120.0)
+
+
+def test_contribution_rows_are_never_treated_as_a_refund() -> None:
+    """Partner top-ups feed contributions_comp; they must not offset category spend."""
+    df = pd.DataFrame(
+        [
+            {"date": "2026-03-05", "amount": -1000.0, "category": "house",
+             "direction": "expense", "partner": None, "source": "t"},
+            {"date": "2026-03-06", "amount": 5000.0, "category": "contribution",
+             "direction": "contribution", "partner": "partner_a", "source": "t"},
+        ]
+    )
+    rep = monthly_compensation_report(df, _refund_cfg())
+    assert rep["house_comp"].iloc[0] == pytest.approx(200.0)
+    assert rep["contributions_comp"].iloc[0] == pytest.approx(-2500.0)
