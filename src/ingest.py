@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from src.classifier import classify_full
-from src.config_manager import load_config, resolve_path
+from src.config_manager import load_config, resolve_source_file
 from src.database import (
     backfill_account_type_from_config,
     connect,
@@ -57,7 +57,7 @@ def load_and_parse_source(
     source_spec: dict[str, Any],
 ) -> list[dict[str, Any]]:
     rel = source_spec["file"]
-    path = resolve_path(cfg, rel)
+    path = resolve_source_file(cfg, rel)
     if not path.is_file():
         raise FileNotFoundError(f"Bank file not found: {path}")
     parser_name = source_spec["parser"]
@@ -103,7 +103,10 @@ def import_all_configured(
         dates = [r["date"] for r in rows] if rows else []
         dr_start = min(dates) if dates else None
         dr_end = max(dates) if dates else None
-        log_import(conn, spec["id"], spec.get("file"), added, skipped, dr_start, dr_end)
+        # Log the concrete file, not the glob pattern — the import log is the
+        # record of which export a row actually came from.
+        resolved = resolve_source_file(cfg, spec["file"])
+        log_import(conn, spec["id"], resolved.name, added, skipped, dr_start, dr_end)
         cat_counts = Counter(r.get("category", "other") for r in rows)
         dir_counts = Counter(r.get("direction", "expense") for r in rows)
         categories_total.update(cat_counts)
@@ -111,6 +114,7 @@ def import_all_configured(
         details.append(
             {
                 "source_id": spec["id"],
+                "file": resolved.name,
                 "added": added,
                 "skipped": skipped,
                 "parsed": len(rows),

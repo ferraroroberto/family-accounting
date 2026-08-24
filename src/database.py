@@ -310,6 +310,65 @@ def reclassify_all(
     }
 
 
+def set_manual_override(
+    conn: sqlite3.Connection,
+    tx_id: int,
+    category: str,
+    partner: str | None = None,
+) -> bool:
+    """Pin one transaction to *category* and shield it from reclassification.
+
+    Rows with ``manual_override = 1`` are skipped by :func:`reclassify_all`, so a
+    correction the keywords cannot express (an internal transfer that looks like a
+    partner contribution, a one-off miscoded by the bank) survives every future
+    keyword edit. Direction is derived from the category and the sign of the
+    amount, mirroring the classifier. Returns False if *tx_id* does not exist.
+    """
+    row = conn.execute(
+        "SELECT amount, account_type FROM transactions WHERE id = ?", (tx_id,)
+    ).fetchone()
+    if row is None:
+        return False
+
+    amount = float(row["amount"])
+    if category == "contribution":
+        direction = "contribution"
+    elif (row["account_type"] or "joint") == "personal":
+        direction = "expense" if amount < 0 else "income"
+    else:
+        direction = "expense" if amount < 0 else "contribution" if category == "other" else "expense"
+
+    now = datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
+    conn.execute(
+        "UPDATE transactions SET category = ?, direction = ?, partner = ?,"
+        " rule = 'manual', manual_override = 1, updated_at = ? WHERE id = ?",
+        (category, direction, partner if category == "contribution" else None, now, tx_id),
+    )
+    conn.commit()
+    return True
+
+
+def clear_manual_override(conn: sqlite3.Connection, tx_id: int) -> bool:
+    """Release a pinned row so the next reclassification governs it again."""
+    now = datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
+    cur = conn.execute(
+        "UPDATE transactions SET manual_override = 0, updated_at = ?"
+        " WHERE id = ? AND manual_override = 1",
+        (now, tx_id),
+    )
+    conn.commit()
+    return cur.rowcount > 0
+
+
+def list_manual_overrides(conn: sqlite3.Connection) -> list[dict[str, Any]]:
+    """Every pinned row, newest first — the audit trail for manual corrections."""
+    cur = conn.execute(
+        "SELECT id, date, description, amount, category, direction, partner, account_type"
+        " FROM transactions WHERE manual_override = 1 ORDER BY date DESC, id DESC"
+    )
+    return [dict(r) for r in cur.fetchall()]
+
+
 def backfill_account_type_from_config(
     conn: sqlite3.Connection,
     source_to_account_type: dict[str, str],

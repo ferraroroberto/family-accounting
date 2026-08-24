@@ -57,12 +57,41 @@ def save_config(data: dict[str, Any], path: Path | None = None) -> None:
 
 
 def resolve_path(cfg: dict[str, Any], relative: str) -> Path:
-    """Resolve a path from config relative to project root."""
+    """Resolve a path from config relative to project root.
+
+    ``base_directory`` may be absolute (e.g. a synced OneDrive folder), in which
+    case it wins over the project root — standard ``pathlib`` join semantics.
+    """
     base = cfg.get("bank_imports", {}).get("base_directory")
     root = project_root()
     if base:
         return (root / base / relative).resolve()
     return (root / relative).resolve()
+
+
+def resolve_source_file(cfg: dict[str, Any], relative: str) -> Path:
+    """Resolve a ``bank_imports.sources[].file`` entry to one concrete file.
+
+    Plain paths resolve exactly as :func:`resolve_path`. When the entry contains
+    a glob wildcard (``*`` or ``?``) the newest match by modification time is
+    returned, so a dated export (``..._2026-04-01_2026-08-24.XLS``) can be dropped
+    into the source folder without editing the config each cycle.
+
+    Raises FileNotFoundError when a pattern matches nothing, naming the directory
+    and the pattern — a silent skip here would look like "no new transactions".
+    """
+    if not any(ch in relative for ch in "*?"):
+        return resolve_path(cfg, relative)
+
+    target = resolve_path(cfg, relative)
+    directory, pattern = target.parent, target.name
+    matches = [p for p in directory.glob(pattern) if p.is_file()]
+    if not matches:
+        raise FileNotFoundError(
+            f"No file matching '{pattern}' in {directory}. "
+            "Download the export into that folder, or fix the pattern in config.json."
+        )
+    return max(matches, key=lambda p: p.stat().st_mtime)
 
 
 def partner_names(cfg: dict[str, Any]) -> tuple[str, str]:

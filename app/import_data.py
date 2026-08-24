@@ -6,7 +6,7 @@ import pandas as pd
 import streamlit as st
 
 from app.data_loader import clear_data_caches, get_config
-from src.config_manager import default_config_path, load_config, resolve_path
+from src.config_manager import default_config_path, load_config, resolve_source_file
 from src.ingest import import_all_configured, load_and_parse_source, reclassify_database
 
 
@@ -34,6 +34,7 @@ def _show_import_summary(res: dict) -> None:
     for d in res.get("sources", []):
         row = {
             "source": d["source_id"],
+            "file": d.get("file", ""),
             "added": d["added"],
             "skipped": d["skipped"],
             "parsed": d["parsed"],
@@ -77,10 +78,20 @@ def render() -> None:
         return
 
     st.subheader("Configured sources")
+    base = (cfg.get("bank_imports") or {}).get("base_directory")
+    if base:
+        st.caption(f"Reading from `{base}`")
     for s in sources:
-        p = resolve_path(cfg, s["file"])
-        ok = p.is_file()
-        st.write(f"- **{s['id']}** → `{s['file']}` {'OK' if ok else 'file not found'}")
+        try:
+            p = resolve_source_file(cfg, s["file"])
+        except FileNotFoundError as e:
+            st.write(f"- **{s['id']}** → `{s['file']}` — no match")
+            st.caption(str(e))
+            continue
+        if p.is_file():
+            st.write(f"- **{s['id']}** → `{p.name}`")
+        else:
+            st.write(f"- **{s['id']}** → `{s['file']}` — file not found")
 
     st.subheader("Import from configuration")
     if st.button("Import all files", type="primary", key="btn_import_all"):
@@ -123,7 +134,12 @@ def render() -> None:
     st.subheader("Preview (local file)")
     which = st.selectbox("Source", options=[s["id"] for s in sources], key="prev_src")
     spec = next(x for x in sources if x["id"] == which)
-    p = resolve_path(cfg, spec["file"])
+    try:
+        p = resolve_source_file(cfg, spec["file"])
+    except FileNotFoundError as e:
+        st.warning(str(e))
+        return
+    st.caption(f"Would parse `{p.name}`")
     if p.is_file() and st.button("Preview", key="btn_preview"):
         with st.spinner("Parsing…"):
             rows = load_and_parse_source(cfg, spec)

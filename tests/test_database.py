@@ -173,3 +173,56 @@ def test_build_source_map_missing_account_key_defaults_to_joint() -> None:
     }
     m = _build_source_account_type_map(cfg)
     assert m == {"unknown_src": "joint"}
+
+
+def test_manual_override_pins_a_row_against_reclassification(tmp_path) -> None:
+    """A pinned row keeps its category no matter what the classifier would say."""
+    from src.database import (
+        clear_manual_override,
+        connect,
+        init_db,
+        insert_transactions,
+        list_manual_overrides,
+        reclassify_all,
+        set_manual_override,
+        transaction_hash,
+    )
+
+    conn = connect(tmp_path / "t.db")
+    init_db(conn)
+    desc = "transfer from roberto ferraro"
+    insert_transactions(conn, [{
+        "source": "revolut_joint", "date": "2026-05-19", "description": desc,
+        "amount": 5000.0, "category": "contribution", "direction": "contribution",
+        "partner": "partner_a", "manual_override": 0, "yyyymm": "202605",
+        "rule": "contribution", "account_type": "joint",
+        "hash": transaction_hash("revolut_joint", "2026-05-19", 5000.0, desc),
+    }])
+    tx_id = conn.execute("SELECT id FROM transactions").fetchone()["id"]
+
+    # Everything the classifier sees says "contribution".
+    always_contribution = lambda d, a, t="joint": ("contribution", "contribution", "contribution", "partner_a")
+
+    assert set_manual_override(conn, tx_id, "other") is True
+    res = reclassify_all(conn, always_contribution)
+    assert res["rows_touched"] == 0, "a pinned row must not be reclassified"
+    assert conn.execute("SELECT category FROM transactions").fetchone()["category"] == "other"
+
+    listed = list_manual_overrides(conn)
+    assert [o["id"] for o in listed] == [tx_id]
+
+    # Releasing it hands the row back to the classifier.
+    assert clear_manual_override(conn, tx_id) is True
+    assert clear_manual_override(conn, tx_id) is False, "releasing twice is a no-op"
+    reclassify_all(conn, always_contribution)
+    assert conn.execute("SELECT category FROM transactions").fetchone()["category"] == "contribution"
+    conn.close()
+
+
+def test_manual_override_on_missing_row_returns_false(tmp_path) -> None:
+    from src.database import connect, init_db, set_manual_override
+
+    conn = connect(tmp_path / "t.db")
+    init_db(conn)
+    assert set_manual_override(conn, 99999, "other") is False
+    conn.close()

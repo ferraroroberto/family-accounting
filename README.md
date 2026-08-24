@@ -13,8 +13,11 @@ All personal data (partner names, income figures, classification keywords) live 
 - **Rule-based classification** — keyword matching assigns each transaction to a category (kids, food, health, house, equal, contribution, or other). Rules are edited live from the UI via dedicated **Joint** and **Personal** sub-tabs. Contribution detection supports two strategies: explicit `description_keywords` (positive amounts, partner declared in config) or trigger keywords + partner name + round-number amount check.
 - **Flexible share formulas** — per-category cost-sharing supports three modes: `fixed` percentage, `income_ratio` (derived from partner net incomes), and `blended` (fixed base + income-weighted variable).
 - **Monthly compensation report** — computes how much each partner owes the other each month, assuming the joint account is funded 50/50. Includes a `contributions_comp` column for partner fund transfers.
-- **Reclassification** — re-run classification rules on all non-manually-overridden transactions in one click (account-type-aware).
-- **Duplicate prevention** — SHA-256 hash per transaction prevents double-imports across overlapping date-range exports.
+- **Reclassification** — re-run classification rules on all non-manually-overridden transactions in one click (account-type-aware). Individual rows can be **pinned** to a category from the UI so a correction the keywords cannot express survives every future keyword edit.
+- **Refunds net against spend** — a `devolucion compra`, direct-debit reversal, or insurance reimbursement reduces the category it was credited back to, rather than being ignored.
+- **Duplicate prevention** — SHA-256 hash per transaction prevents double-imports across overlapping date-range exports. Re-running an import with the same files is a no-op, so exporting a wider date range than strictly needed is always safe.
+
+> **Operators:** the deployment-specific runbook — which bank export format to download, what to name the files, and how previous exports are archived — lives as `HANDOFF.md` beside the bank exports themselves, not in this repo (it contains local paths and account detail). This README documents the application; that file documents one installation of it.
 
 ---
 
@@ -42,6 +45,10 @@ family-accounting/
 │       ├── caixabank.py        # CaixaBank XLS/XLSX parser (auto-detects layout)
 │       └── revolut.py          # Revolut CSV parser
 │
+├── scripts/                    # CLI entry points (no Streamlit)
+│   ├── import_bank_files.py    # run the configured imports; --dry-run
+│   └── classify_triage.py      # unclassified report, keyword vetting, balance
+│
 ├── tests/                      # pytest suite
 │   ├── test_calculator.py
 │   ├── test_caixabank_xlsx.py
@@ -50,7 +57,8 @@ family-accounting/
 │   ├── test_database.py
 │   ├── test_integration.py
 │   ├── test_parsers.py
-│   └── test_reports.py
+│   ├── test_reports.py
+│   └── test_source_resolution.py
 │
 ├── config.example.json         # neutral example — committed to repo
 ├── config.json                 # actual config with personal data — gitignored
@@ -226,25 +234,29 @@ Maps account sources to local file paths for batch import:
 
 ```json
 "bank_imports": {
-  "base_directory": "",
+  "base_directory": "tmp/input",
   "sources": [
     {
       "id": "caixabank_joint",
       "account_key": "caixabank_common",
-      "file": "tmp/input/your_export.xls",
+      "file": "caixabank_joint_export_2*.xls",
       "parser": "caixabank",
       "layout": { "sheet_index": 0, "transaction_date_column": "f_valor" }
     },
     {
       "id": "revolut_joint",
       "account_key": "revolut_joint",
-      "file": "tmp/input/your_export.csv",
+      "file": "joint_account-statement_*.csv",
       "parser": "revolut",
       "layout": { "state_filter": "COMPLETED" }
     }
   ]
 }
 ```
+
+**`base_directory`** may be relative to the project root or an **absolute path** — point it at wherever your bank downloads land (a synced cloud folder, for example) and skip copying files into the repo.
+
+**`file`** may be a plain filename or a **glob pattern**. With a glob, the newest match by modification time is used, so exports whose names carry a date range (`..._2026-04-01_2026-08-24.XLS`) can be dropped into the folder without editing the config each cycle. The Import tab shows the concrete file each source resolved to, and the import log records it. An unmatched pattern raises a clear error rather than silently importing nothing.
 
 ---
 
@@ -260,6 +272,7 @@ Maps account sources to local file paths for batch import:
 
 ### Import Data
 
+- **Configured sources** — lists each source with the concrete file it resolved to (important when `file` is a glob), and the `base_directory` it read from.
 - **Import all files** — reads all configured `bank_imports.sources`, parses, classifies (using joint or personal rules per source), and inserts into the database. Skips duplicates by hash.
 - **Reclassify all** — re-runs classification rules on every transaction without a manual override (account-type-aware).
 - **Preview** — parse a single source in memory without writing to the database.
@@ -269,6 +282,7 @@ Maps account sources to local file paths for batch import:
 
 - **Joint** sub-tab: edit classification keywords for joint account categories. Saves `config.json` and immediately reclassifies the database.
 - **Personal** sub-tab: edit classification keywords for personal account categories (stored under `personal_classification_rules`).
+- **Manual override**: pin one transaction to a category (`manual_override = 1`) so reclassification leaves it alone, and release it again later. Use it where a keyword cannot express the correction — most often an internal transfer between two joint accounts, which looks exactly like a partner contribution and would otherwise be counted twice. Pinning to `contribution` with no partner marks a row explicitly neutral: excluded from expense compensation and worth zero in `contributions_comp`.
 - Filterable transaction table with **Account type** selector (joint/personal), category, rule, direction, source, and date range filters. Enriched split columns shown for joint transactions only.
 
 ---
@@ -291,7 +305,7 @@ The SQLite database (`data/expenses.db`) contains two tables:
 | `category` | TEXT | `kids` \| `food` \| `health` \| `house` \| `equal` \| `contribution` \| `other` |
 | `direction` | TEXT | `expense` \| `contribution` (joint) or `expense` \| `income` (personal) |
 | `partner` | TEXT | Nullable; for contribution attribution |
-| `manual_override` | INTEGER | `1` if manually reclassified (skipped on reclassify) |
+| `manual_override` | INTEGER | `1` if pinned via **Configuration → Manual override** (skipped on reclassify) |
 | `yyyymm` | TEXT | Pre-computed `YYYYMM` for fast grouping |
 | `rule` | TEXT | Matched keyword or `default` |
 | `account_type` | TEXT | `joint` or `personal` — derived from account config |
@@ -328,7 +342,7 @@ Standard Revolut CSV export. Filters to `State == COMPLETED` by default. Falls b
 The joint account is assumed to be **funded 50/50** by both partners. For each category and each calendar month:
 
 ```
-total_month      = sum of expenses in that category (negative amounts)
+total_month      = net of that category (outflows less any refunds credited back)
 partner_a_share  = from category share formula
 amount_ideal_a   = total_month × partner_a_share
 amount_paid_a    = total_month / 2          (50/50 account funding)
@@ -354,6 +368,29 @@ Only the excess above each partner's ideal 50 % share counts (the joint account 
 The matched partner is the one whose name appears in the transaction description alongside a trigger keyword (`traspaso`, `transfer`) and a round amount (multiple of 100).
 
 ---
+
+## Command line
+
+Everything the UI does to the data is also reachable headlessly, for runbooks and scripted updates. Run from the project root so `src/` is importable.
+
+```bash
+# Import the configured sources (same as "Import all files"). Idempotent.
+python -m scripts.import_bank_files
+python -m scripts.import_bank_files --dry-run     # parse + classify, write nothing
+
+# How much spending is unclassified, and what it costs the report
+python -m scripts.classify_triage --summary --since 2026-04-03
+python -m scripts.classify_triage --unclassified
+
+# Vet candidate keywords BEFORE adding them — matching is plain substring,
+# so short keywords capture unrelated rows ("bp" matches "stripe…bppqydx")
+python -m scripts.classify_triage --check "sorli,cepsa,bp"
+
+# Monthly compensation table + running balance
+python -m scripts.classify_triage --compensation
+```
+
+Unclassified **joint** rows are excluded from the compensation maths, so they understate what is owed — `--summary` reports that share explicitly rather than letting it pass as a clean run.
 
 ## Testing
 

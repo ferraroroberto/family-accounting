@@ -50,7 +50,8 @@ def monthly_compensation_report(
 ) -> pd.DataFrame:
     """
     One row per calendar month:
-    - Expense compensation for kids, food, house, equal (negative outflows only)
+    - Expense compensation for kids, food, house, equal (category net: outflows
+      less any refunds credited back to that category in the same month)
     - contributions_comp: net impact of partner fund transfers
     - total_comp: sum of all category compensations + contributions_comp
     - total_comp_cumulative: running total of total_comp
@@ -66,7 +67,13 @@ def monthly_compensation_report(
     d["yyyymm"] = pd.to_datetime(d["date"], errors="coerce").dt.strftime("%Y%m")
     d = d.dropna(subset=["yyyymm"])
 
-    # Expense rows: exclude contributions
+    # Expense rows: exclude contributions.
+    #
+    # Positive amounts are kept so that refunds net against the spending they
+    # refund — a `devolucion compra`, a direct-debit `retroc. rec.`, or a
+    # `segurcaixa … reembolso` is money coming back on a charge already counted,
+    # and dropping it overstates the category. `equal` is unaffected either way
+    # (a 50/50 share yields comp = T/2 − T×0.5 = 0 for any total).
     is_contribution = (
         (d["category"] == "contribution")
         if "category" in d.columns
@@ -77,7 +84,7 @@ def monthly_compensation_report(
         if "direction" in d.columns
         else pd.Series(True, index=d.index)
     )
-    exp = d[(d["amount"] < 0) & dir_ok & ~is_contribution]
+    exp = d[dir_ok & ~is_contribution]
 
     # Contribution rows
     contrib = d[is_contribution].copy() if "category" in d.columns else pd.DataFrame()
