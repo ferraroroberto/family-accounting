@@ -68,6 +68,8 @@ family-accounting/
 └── pytest.ini
 ```
 
+Where new code goes, and the structure ratchet that guards it: [`docs/layout.md`](docs/layout.md).
+
 ---
 
 ## Setup
