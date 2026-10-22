@@ -5,3 +5,23 @@
 layer       = "working-web"
 icon        = "💶"
 description = "Shared household-expense tracker."
+shape       = "streamlit"
+# Every tracked root folder (app, src, tests, scripts, docs) is in the streamlit
+# preset, so no exception is needed; a new root folder is declared here with a reason.
+extra_roots = []
+
+# [vendored] -- components copied byte-for-byte from project-scaffolding, with the
+# scaffold commit each came from. Re-vendor through /propagate-vendored, never by hand.
+[vendored]
+structure_ratchet = { src = "scripts/structure_ratchet.py", sha = "0d41425ff2797c98d1d3eb7ecb7de0cdb7133456", dest = "scripts/structure_ratchet.py" }
+
+# [structure_ratchet] -- the scaffold's baseline-and-ratchet layout stage. The gate
+# (scripts/verify-before-ship.ps1) runs scripts/structure_ratchet.py, which fails when a
+# new file passes 1,000 lines, a new function 100 lines or a flat directory 40 modules,
+# when a baselined offender grows past its size in .structure-ratchet-baseline.json, when
+# src imports app, and when the root folders do not match `shape` plus `extra_roots`.
+# Existing offenders are baselined at today's size, never excluded. Exit 3 (git unusable,
+# an unparseable file, an unknown shape) fails the gate.
+[structure_ratchet]
+enabled  = true
+baseline = ".structure-ratchet-baseline.json"
