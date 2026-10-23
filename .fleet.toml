@@ -13,7 +13,7 @@ extra_roots = []
 # [vendored] -- components copied byte-for-byte from project-scaffolding, with the
 # scaffold commit each came from. Re-vendor through /propagate-vendored, never by hand.
 [vendored]
-structure_ratchet = { src = "scripts/structure_ratchet.py", sha = "1bad417c51aa9097a2c40b530b413bfdb3b1bb90", dest = "scripts/structure_ratchet.py" }
+structure_ratchet = { src = "scripts/structure_ratchet.py", sha = "84d2b12ab416551762e4a615e4a706df91cea69f", dest = "scripts/structure_ratchet.py" }
 
 # [structure_ratchet] -- the scaffold's baseline-and-ratchet layout stage. The gate
 # (scripts/verify-before-ship.ps1) runs scripts/structure_ratchet.py, which fails when a
