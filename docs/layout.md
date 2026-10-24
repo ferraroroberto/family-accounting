@@ -26,7 +26,8 @@ family-accounting/
 │   ├── import_bank_files.py    # run the configured imports
 │   ├── classify_triage.py      # unclassified report and keyword vetting
 │   ├── verify-before-ship.ps1  # the verification gate
-│   └── structure_ratchet.py    # vendored from project-scaffolding; re-vendor, never edit
+│   ├── structure_ratchet.py    # vendored from project-scaffolding; re-vendor, never edit
+│   └── instruction_ratchet.py  # vendored likewise; lints CLAUDE.md / AGENTS.md against .instruction-ratchet-baseline.json
 │
 ├── tests/                      # pytest suite, one test module per src/ or app/ concern
 └── docs/                       # durable reference: this file and architecture.mmd
@@ -52,5 +53,6 @@ Four functions are over the 100-line limit and recorded at their current length 
 
 ```powershell
 .\.venv\Scripts\python.exe scripts\structure_ratchet.py
+.\.venv\Scripts\python.exe scripts\instruction_ratchet.py
 powershell -File scripts/verify-before-ship.ps1
 ```
