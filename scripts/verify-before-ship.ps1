@@ -17,7 +17,12 @@
                              rises above the committed baseline, or a file passes its
                              size cap. Exit 3 = "not confirmed" (git unusable, an
                              unreadable file, an unclosed fence): a failure, never a pass.
-      4. pytest            - the unit suite
+      4. doc refs ratchet  - scripts/doc_refs_ratchet.py: fails when README.md, CLAUDE.md
+                             or docs/**/*.md names a repo path, module or relative link
+                             that does not exist, beyond the committed baseline. Exit 3 =
+                             "not confirmed" (git unusable, a non-UTF-8 file, an unclosed
+                             fence): a failure, never a pass.
+      5. pytest            - the unit suite
 
     Anchors to the repo root, so run it from anywhere:
       powershell -File scripts/verify-before-ship.ps1
@@ -51,6 +56,7 @@ function Invoke-Stage {
 Invoke-Stage "byte-compile"      { & $py -m compileall -q app src scripts tests }
 Invoke-Stage "structure ratchet" { & $py "scripts/structure_ratchet.py" }
 Invoke-Stage "instruction ratchet" { & $py "scripts/instruction_ratchet.py" }
+Invoke-Stage "doc refs ratchet" { & $py "scripts/doc_refs_ratchet.py" }
 Invoke-Stage "pytest"            { & $py -m pytest }
 
 Write-Host ""
