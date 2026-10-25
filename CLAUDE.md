@@ -34,6 +34,10 @@ See `README.md` for setup, layout, and usage.
 
 - **A comment ratchet gates `scripts/verify-before-ship.ps1`.** It runs the vendored `scripts/comment_ratchet.py` (byte-for-byte from project-scaffolding; re-vendor with `/propagate-vendored comment_ratchet`, never edit) and fails when a product-code file carries more `#NNN` issue references in comments than `.comment-ratchet-baseline.json` records. The baseline is empty: a comment states the present-tense why, and history lives in the issue and `git log`. Exit 3 means "not confirmed" and fails the gate.
 
+## Conventions ratchet
+
+- **A conventions ratchet gates `scripts/verify-before-ship.ps1`.** It runs the vendored `scripts/conventions_ratchet.py` (byte-for-byte from project-scaffolding; re-vendor with `/propagate-vendored conventions_ratchet`, never edit) and fails when a file has more hits than `.conventions-ratchet-baseline.json` records for `no-window` (a subprocess spawn without `CREATE_NO_WINDOW`), `logging-not-print` (a `print()` in `app/` or `src/`; command-line modules are exempt) or `no-drive-path` (a string literal starting with a drive letter). `secret-compare` and `git-wrapper` stay off because the repo has no such helper. The baseline is empty: fix a hit, or mark a deliberate exception with a reasoned `# <rule>-exempt: <why>` comment. Exit 3 means "not confirmed" and fails the gate.
+
 ## Internal architecture
 
 [`docs/architecture.mmd`](docs/architecture.mmd) is a hand-authored Mermaid diagram of this repo's own internal structure (the `app/` UI package, the `src/` business logic, the two bank parsers, `config.json`/`data/expenses.db` as data stores, `tests/`) — the per-repo counterpart to `ferraroroberto/fleet-config`'s fleet-wide `/system-map`. Update it in the same PR as any material structural change (a module added/moved/renamed, a new parser, a new table/column, a new UI tab) — same anti-staleness contract as a `.fleet.toml` `description` field. It is not auto-generated and not covered by the `pytest` suite.
