@@ -26,6 +26,10 @@ See `README.md` for setup, layout, and usage.
 
 - **A static ratchet gates `scripts/verify-before-ship.ps1`.** It runs the vendored `scripts/static_ratchet.py` (byte-for-byte from project-scaffolding; re-vendor with `/propagate-vendored static_ratchet`, never edit) and fails on a duplicated block, an unused import or variable, or a likely-bug or security pattern that is not in `.static-ratchet-baseline.json`. The baseline is empty: fix a new finding rather than recording it. It needs Node (`npx`) and `ruff` in `.venv`; exit 3 means "not confirmed" and fails the gate.
 
+## Docs ratchet
+
+- **A docs ratchet gates `scripts/verify-before-ship.ps1`.** It runs the vendored `scripts/docs_ratchet.py` (byte-for-byte from project-scaffolding; re-vendor with `/propagate-vendored docs_ratchet`, never edit) and fails when the root `README.md` passes 40 KiB, or when `README.md` or a `docs/**/*.md` file carries an issue reference, a dated heading or a changelog heading that is not in `.docs-ratchet-baseline.json`. The baseline is empty: state the present-tense why in words instead of citing an issue. Exit 3 means "not confirmed" and fails the gate.
+
 ## Internal architecture
 
 [`docs/architecture.mmd`](docs/architecture.mmd) is a hand-authored Mermaid diagram of this repo's own internal structure (the `app/` UI package, the `src/` business logic, the two bank parsers, `config.json`/`data/expenses.db` as data stores, `tests/`) — the per-repo counterpart to `ferraroroberto/fleet-config`'s fleet-wide `/system-map`. Update it in the same PR as any material structural change (a module added/moved/renamed, a new parser, a new table/column, a new UI tab) — same anti-staleness contract as a `.fleet.toml` `description` field. It is not auto-generated and not covered by the `pytest` suite.

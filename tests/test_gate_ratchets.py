@@ -10,7 +10,7 @@ import pytest
 ROOT = Path(__file__).resolve().parent.parent
 
 # The ratchets this repo runs as gate stages beyond the structure ratchet's own tests.
-RATCHETS = ["static_ratchet"]
+RATCHETS = ["static_ratchet", "docs_ratchet"]
 
 
 @pytest.fixture(scope="module")

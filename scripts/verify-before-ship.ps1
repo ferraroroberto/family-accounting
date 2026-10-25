@@ -31,7 +31,12 @@
                              (jscpd + ruff) not in the committed baseline. Needs Node (npx)
                              and ruff in the venv. Exit 3 = "not confirmed" (no npx, ruff
                              missing, a detector that could not run): a failure, never a pass.
-      7. pytest            - the unit suite
+      7. docs ratchet      - scripts/docs_ratchet.py: fails when README.md grows past its size
+                             budget, or README.md / docs/**/*.md gains an issue reference, a
+                             dated heading or a changelog heading, beyond the committed
+                             baseline. Exit 3 = "not confirmed" (git unusable, a non-UTF-8
+                             file, an unclosed fence): a failure, never a pass.
+      8. pytest            - the unit suite
 
     Anchors to the repo root, so run it from anywhere:
       powershell -File scripts/verify-before-ship.ps1
@@ -68,6 +73,7 @@ Invoke-Stage "instruction ratchet" { & $py "scripts/instruction_ratchet.py" }
 Invoke-Stage "doc refs ratchet" { & $py "scripts/doc_refs_ratchet.py" }
 Invoke-Stage "dead code ratchet" { & $py "scripts/dead_code_ratchet.py" }
 Invoke-Stage "static ratchet" { & $py "scripts/static_ratchet.py" }
+Invoke-Stage "docs ratchet" { & $py "scripts/docs_ratchet.py" }
 Invoke-Stage "pytest"            { & $py -m pytest }
 
 Write-Host ""
