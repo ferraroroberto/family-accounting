@@ -40,7 +40,12 @@
                              `#NNN` issue references in comments rises above the committed
                              baseline. Exit 3 = "not confirmed" (git unusable, a file that
                              cannot be scanned): a failure, never a pass.
-      9. pytest            - the unit suite
+      9. conventions ratchet - scripts/conventions_ratchet.py: fails when a file's hit count
+                             for an enabled rule (a spawn without CREATE_NO_WINDOW, a print()
+                             in app/ or src/, a hardcoded drive path) rises above the
+                             committed baseline. Exit 3 = "not confirmed" (git unusable, a
+                             .py file that does not parse): a failure, never a pass.
+     10. pytest            - the unit suite
 
     Anchors to the repo root, so run it from anywhere:
       powershell -File scripts/verify-before-ship.ps1
@@ -79,6 +84,7 @@ Invoke-Stage "dead code ratchet" { & $py "scripts/dead_code_ratchet.py" }
 Invoke-Stage "static ratchet" { & $py "scripts/static_ratchet.py" }
 Invoke-Stage "docs ratchet" { & $py "scripts/docs_ratchet.py" }
 Invoke-Stage "comment ratchet" { & $py "scripts/comment_ratchet.py" }
+Invoke-Stage "conventions ratchet" { & $py "scripts/conventions_ratchet.py" }
 Invoke-Stage "pytest"            { & $py -m pytest }
 
 Write-Host ""
