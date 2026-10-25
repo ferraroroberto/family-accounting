@@ -26,7 +26,12 @@
                              class or method that nothing refers to is not in the
                              committed baseline. Exit 3 = "not confirmed" (git unusable,
                              a .py file that does not parse): a failure, never a pass.
-      6. pytest            - the unit suite
+      6. static ratchet    - scripts/static_ratchet.py: fails on a duplicated block, an
+                             unused import or variable, or a likely-bug / security pattern
+                             (jscpd + ruff) not in the committed baseline. Needs Node (npx)
+                             and ruff in the venv. Exit 3 = "not confirmed" (no npx, ruff
+                             missing, a detector that could not run): a failure, never a pass.
+      7. pytest            - the unit suite
 
     Anchors to the repo root, so run it from anywhere:
       powershell -File scripts/verify-before-ship.ps1
@@ -62,6 +67,7 @@ Invoke-Stage "structure ratchet" { & $py "scripts/structure_ratchet.py" }
 Invoke-Stage "instruction ratchet" { & $py "scripts/instruction_ratchet.py" }
 Invoke-Stage "doc refs ratchet" { & $py "scripts/doc_refs_ratchet.py" }
 Invoke-Stage "dead code ratchet" { & $py "scripts/dead_code_ratchet.py" }
+Invoke-Stage "static ratchet" { & $py "scripts/static_ratchet.py" }
 Invoke-Stage "pytest"            { & $py -m pytest }
 
 Write-Host ""

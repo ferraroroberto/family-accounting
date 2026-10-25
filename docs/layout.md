@@ -29,7 +29,8 @@ family-accounting/
 │   ├── structure_ratchet.py    # vendored from project-scaffolding; re-vendor, never edit
 │   ├── instruction_ratchet.py  # vendored likewise; lints CLAUDE.md / AGENTS.md against .instruction-ratchet-baseline.json
 │   ├── doc_refs_ratchet.py     # vendored likewise; checks doc references against .doc-refs-ratchet-baseline.json
-│   └── dead_code_ratchet.py    # vendored likewise; flags unreferenced functions against .dead-code-ratchet-baseline.json
+│   ├── dead_code_ratchet.py    # vendored likewise; flags unreferenced functions against .dead-code-ratchet-baseline.json
+│   └── static_ratchet.py       # vendored likewise; flags duplicated blocks, unused names and bug/security patterns against .static-ratchet-baseline.json
 │
 ├── tests/                      # pytest suite, one test module per src/ or app/ concern
 └── docs/                       # durable reference: this file and architecture.mmd
@@ -58,5 +59,6 @@ Four functions are over the 100-line limit and recorded at their current length 
 .\.venv\Scripts\python.exe scripts\instruction_ratchet.py
 .\.venv\Scripts\python.exe scripts\doc_refs_ratchet.py
 .\.venv\Scripts\python.exe scripts\dead_code_ratchet.py
+.\.venv\Scripts\python.exe scripts\static_ratchet.py
 powershell -File scripts/verify-before-ship.ps1
 ```

@@ -22,6 +22,10 @@ See `README.md` for setup, layout, and usage.
 
 - **A structure ratchet gates `scripts/verify-before-ship.ps1`.** It runs the vendored `scripts/structure_ratchet.py` (byte-for-byte from project-scaffolding; re-vendor with `/propagate-vendored structure_ratchet`, never edit) and fails when a file passes 1,000 lines, a function 100 lines or a flat directory 40 modules and is new or above its entry in `.structure-ratchet-baseline.json`, when `src` imports `app`, or when the root folders do not match `shape = "streamlit"` plus `extra_roots` in `.fleet.toml`. The four baselined long functions in `app/dashboard.py` and `app/configuration.py` are recorded at their real size, never excluded: they cannot grow, so new UI goes in a new function or module. Burn the baseline down with `--update-baseline`; only `--allow-additions` raises it, and that shows in the diff. Exit 3 means "not confirmed" and fails the gate. Where code goes: [`docs/layout.md`](docs/layout.md).
 
+## Static ratchet
+
+- **A static ratchet gates `scripts/verify-before-ship.ps1`.** It runs the vendored `scripts/static_ratchet.py` (byte-for-byte from project-scaffolding; re-vendor with `/propagate-vendored static_ratchet`, never edit) and fails on a duplicated block, an unused import or variable, or a likely-bug or security pattern that is not in `.static-ratchet-baseline.json`. The baseline is empty: fix a new finding rather than recording it. It needs Node (`npx`) and `ruff` in `.venv`; exit 3 means "not confirmed" and fails the gate.
+
 ## Internal architecture
 
 [`docs/architecture.mmd`](docs/architecture.mmd) is a hand-authored Mermaid diagram of this repo's own internal structure (the `app/` UI package, the `src/` business logic, the two bank parsers, `config.json`/`data/expenses.db` as data stores, `tests/`) — the per-repo counterpart to `ferraroroberto/fleet-config`'s fleet-wide `/system-map`. Update it in the same PR as any material structural change (a module added/moved/renamed, a new parser, a new table/column, a new UI tab) — same anti-staleness contract as a `.fleet.toml` `description` field. It is not auto-generated and not covered by the `pytest` suite.

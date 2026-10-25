@@ -78,6 +78,7 @@ Where new code goes, and the structure ratchet that guards it: [`docs/layout.md`
 
 - Python 3.11+
 - A virtual environment (recommended)
+- Node.js (`npx`), only for the duplicate-code check in the `scripts/verify-before-ship.ps1` gate
 
 ### Install
 
