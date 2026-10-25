@@ -112,29 +112,8 @@ def _metric_card(label: str, value: str, caption_text: str) -> None:
     st.caption(caption_text)
 
 
-def render() -> None:
-    st.header("Dashboard")
-
-    cfg_path_st = st.session_state.get("cfg_path_exists", True)
-    if not cfg_path_st:
-        st.error("Missing `config.json`.")
-        return
-
-    cfg = get_config()
-    dbp = default_db_path()
-    if not dbp.is_file():
-        st.info("No database yet. Use **Import data** to load bank exports.")
-        return
-
-    conn = connect(dbp)
-    init_db(conn)
-    df = load_transactions_df(conn)
-    conn.close()
-
-    if df.empty:
-        st.info("No transactions. Import data first.")
-        return
-
+def _split_joint_frames(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """Return ``(joint_df, expenses, contrib_df)`` for the joint-account views."""
     # Joint-only data for compensation calculations
     if "account_type" in df.columns:
         joint_df = df[df["account_type"] == "joint"].copy()
@@ -148,7 +127,10 @@ def render() -> None:
 
     # Contribution rows (joint only)
     contrib_df = joint_df[contributions_mask].copy() if "category" in joint_df.columns else pd.DataFrame()
+    return joint_df, expenses, contrib_df
 
+
+def _render_totals(df: pd.DataFrame, joint_df: pd.DataFrame, expenses: pd.DataFrame) -> None:
     c1, c2, c3 = st.columns(3)
     with c1:
         st.metric("Total spending / joint (outflows)", f"{expenses['amount_abs'].sum():,.2f} €")
@@ -159,14 +141,15 @@ def render() -> None:
         n_personal = len(df) - n_joint
         st.metric("Joint / Personal", f"{n_joint} / {n_personal}")
 
-    pa, pb = partner_names(cfg)
 
-    rep = monthly_compensation_report(joint_df, cfg)
-
-    comp_cat_labels = " · ".join(
-        cfg.get("categories", {}).get(c, {}).get("label", c) for c in COMPENSATION_CATEGORIES
-    )
-
+def _render_share_cards(
+    cfg: dict,
+    rep: pd.DataFrame,
+    contrib_df: pd.DataFrame,
+    pa: str,
+    pb: str,
+    comp_cat_labels: str,
+) -> None:
     st.subheader("Compensation share (ideal split vs 50/50 funding)")
     st.caption(
         f"Each category uses the configured formula; expense compensation includes **{comp_cat_labels}** outflows. "
@@ -176,7 +159,6 @@ def render() -> None:
     # Show kids, food, health, house cards + contributions card (replaces equal card)
     display_cats = [c for c in COMPENSATION_CATEGORIES if c != "equal"]
     ratio_cols = st.columns(len(display_cats) + 1)
-    accent = _read_accent_hex()
 
     for i, cat in enumerate(display_cats):
         sa, sb = share_for_category(cfg, cat)
@@ -201,91 +183,270 @@ def render() -> None:
             cap = "No contributions recorded"
         _metric_card("Contributions", _format_eu_decimal(contrib_cum) + " €", cap)
 
-    if not expenses.empty:
-        cat_sum = expenses.groupby("category", as_index=False)["amount_abs"].sum()
-        cat_sum = cat_sum.sort_values("amount_abs", ascending=False)
-        n = len(cat_sum)
-        colors = accent_gradient(n, accent)
-        cmap = dict(zip(cat_sum["category"].astype(str), colors))
-        fig_pie = px.pie(
-            cat_sum,
-            names="category",
-            values="amount_abs",
-            title="Spending by category — joint account (contributions excluded)",
-            color="category",
-            color_discrete_map=cmap,
-        )
-        fig_pie.update_traces(
-            textposition="inside",
-            textinfo="percent+label",
-            marker=dict(line=dict(color="#0E1117", width=1)),
-        )
-        st.plotly_chart(fig_pie, width="stretch")
 
+def _render_spending_pie(expenses: pd.DataFrame, accent: str) -> None:
+    cat_sum = expenses.groupby("category", as_index=False)["amount_abs"].sum()
+    cat_sum = cat_sum.sort_values("amount_abs", ascending=False)
+    n = len(cat_sum)
+    colors = accent_gradient(n, accent)
+    cmap = dict(zip(cat_sum["category"].astype(str), colors))
+    fig_pie = px.pie(
+        cat_sum,
+        names="category",
+        values="amount_abs",
+        title="Spending by category — joint account (contributions excluded)",
+        color="category",
+        color_discrete_map=cmap,
+    )
+    fig_pie.update_traces(
+        textposition="inside",
+        textinfo="percent+label",
+        marker=dict(line=dict(color="#0E1117", width=1)),
+    )
+    st.plotly_chart(fig_pie, width="stretch")
+
+
+def _render_monthly_compensation(
+    rep: pd.DataFrame, pa: str, pb: str, comp_cat_labels: str, accent: str
+) -> None:
     st.subheader(f"Monthly compensation ({comp_cat_labels} + contributions)")
     st.caption(
         f"Positive **total** means **{pa}** owes **{pb}**; negative **total** means **{pb}** owes **{pa}** "
         f"(Partner A perspective on 50/50 account funding). "
         f"**contributions_comp**: negative = A funded more, positive = B funded more."
     )
-    if not rep.empty:
-        disp = rep.sort_values("month", ascending=False).copy()
-        disp["month"] = disp["month"].map(_format_yyyymm)
-        comp_cols_to_format = [f"{c}_comp" for c in COMPENSATION_CATEGORIES] + [
-            "contributions_comp",
-            "total_comp",
-            "total_comp_cumulative",
-        ]
-        for col in comp_cols_to_format:
-            if col in disp.columns:
-                disp[col] = disp[col].map(_format_eu_decimal)
-        comp_column_config = {
-            col: st.column_config.TextColumn(alignment="right")
-            for col in comp_cols_to_format
-            if col in disp.columns
-        }
-        st.dataframe(
-            disp,
-            width="stretch",
-            height=min(400, 40 + len(disp) * 35),
-            column_config=comp_column_config,
-        )
-        rep_ch = rep.sort_values("month", ascending=True).copy()
-        rep_ch["month_label"] = rep_ch["month"].map(_format_yyyymm)
-        fig_bar = go.Figure(
-            data=[
-                go.Bar(
-                    x=rep_ch["month_label"],
-                    y=rep_ch["total_comp"],
-                    name="Net compensation (A perspective)",
-                    marker_color=accent,
-                )
-            ]
-        )
-        fig_bar.update_layout(
-            title="Monthly net compensation",
-            xaxis_title="Month",
-            yaxis_title="€",
-        )
-        fig_bar.update_xaxes(type="category")
-
-        st.plotly_chart(fig_bar, width="stretch")
-
-        fig_cum = px.line(
-            rep_ch,
-            x="month_label",
-            y="total_comp_cumulative",
-            title="Cumulative compensation",
-            markers=True,
-            color_discrete_sequence=[accent],
-        )
-        fig_cum.update_xaxes(type="category", title="Month")
-        fig_cum.update_traces(line=dict(color=accent), marker=dict(color=accent))
-        st.plotly_chart(fig_cum, width="stretch")
-    else:
+    if rep.empty:
         st.warning("Could not build compensation rows (check dates and categories).")
+        return
+
+    disp = rep.sort_values("month", ascending=False).copy()
+    disp["month"] = disp["month"].map(_format_yyyymm)
+    comp_cols_to_format = [f"{c}_comp" for c in COMPENSATION_CATEGORIES] + [
+        "contributions_comp",
+        "total_comp",
+        "total_comp_cumulative",
+    ]
+    for col in comp_cols_to_format:
+        if col in disp.columns:
+            disp[col] = disp[col].map(_format_eu_decimal)
+    comp_column_config = {
+        col: st.column_config.TextColumn(alignment="right")
+        for col in comp_cols_to_format
+        if col in disp.columns
+    }
+    st.dataframe(
+        disp,
+        width="stretch",
+        height=min(400, 40 + len(disp) * 35),
+        column_config=comp_column_config,
+    )
+    rep_ch = rep.sort_values("month", ascending=True).copy()
+    rep_ch["month_label"] = rep_ch["month"].map(_format_yyyymm)
+    fig_bar = go.Figure(
+        data=[
+            go.Bar(
+                x=rep_ch["month_label"],
+                y=rep_ch["total_comp"],
+                name="Net compensation (A perspective)",
+                marker_color=accent,
+            )
+        ]
+    )
+    fig_bar.update_layout(
+        title="Monthly net compensation",
+        xaxis_title="Month",
+        yaxis_title="€",
+    )
+    fig_bar.update_xaxes(type="category")
+
+    st.plotly_chart(fig_bar, width="stretch")
+
+    fig_cum = px.line(
+        rep_ch,
+        x="month_label",
+        y="total_comp_cumulative",
+        title="Cumulative compensation",
+        markers=True,
+        color_discrete_sequence=[accent],
+    )
+    fig_cum.update_xaxes(type="category", title="Month")
+    fig_cum.update_traces(line=dict(color=accent), marker=dict(color=accent))
+    st.plotly_chart(fig_cum, width="stretch")
+
+
+def render() -> None:
+    st.header("Dashboard")
+
+    cfg_path_st = st.session_state.get("cfg_path_exists", True)
+    if not cfg_path_st:
+        st.error("Missing `config.json`.")
+        return
+
+    cfg = get_config()
+    dbp = default_db_path()
+    if not dbp.is_file():
+        st.info("No database yet. Use **Import data** to load bank exports.")
+        return
+
+    conn = connect(dbp)
+    init_db(conn)
+    df = load_transactions_df(conn)
+    conn.close()
+
+    if df.empty:
+        st.info("No transactions. Import data first.")
+        return
+
+    joint_df, expenses, contrib_df = _split_joint_frames(df)
+    _render_totals(df, joint_df, expenses)
+
+    pa, pb = partner_names(cfg)
+
+    rep = monthly_compensation_report(joint_df, cfg)
+
+    comp_cat_labels = " · ".join(
+        cfg.get("categories", {}).get(c, {}).get("label", c) for c in COMPENSATION_CATEGORIES
+    )
+    accent = _read_accent_hex()
+
+    _render_share_cards(cfg, rep, contrib_df, pa, pb, comp_cat_labels)
+
+    if not expenses.empty:
+        _render_spending_pie(expenses, accent)
+
+    _render_monthly_compensation(rep, pa, pb, comp_cat_labels, accent)
 
     _render_rule_summary(df, cfg)
+
+
+def _render_rule_filters(rule_df: pd.DataFrame) -> tuple[str, pd.DataFrame, bool]:
+    """Render the Rule summary filter widgets; return ``(account_type, filtered_rows, sort_asc)``."""
+    acct_types = sorted(rule_df["account_type"].unique().tolist())
+    fa0, fa1, fa2, fa3, fa4 = st.columns([1, 1, 2, 1, 2])
+    with fa0:
+        sel_acct_type = st.selectbox(
+            "Account type",
+            options=acct_types,
+            index=acct_types.index("joint") if "joint" in acct_types else 0,
+            key="rule_summary_acct_type",
+        )
+    rule_df = rule_df[rule_df["account_type"] == sel_acct_type]
+
+    all_categories = sorted(rule_df["category"].unique().tolist())
+    with fa1:
+        sel_cats = st.multiselect(
+            "Filter by category",
+            options=all_categories,
+            default=[],
+            key="rule_summary_cat_filter",
+        )
+    fc2, fc3, fc4 = fa2, fa3, fa4
+    with fc2:
+        rule_kw = st.text_input(
+            "Filter by rule (keyword)",
+            value="",
+            key="rule_summary_rule_filter",
+        )
+    with fc3:
+        if "rule_summary_sort_asc" not in st.session_state:
+            st.session_state["rule_summary_sort_asc"] = True
+        st.write("")  # vertical alignment
+        if st.button(
+            "↑ Most negative first" if st.session_state["rule_summary_sort_asc"] else "↓ Most positive first",
+            key="rule_summary_sort_toggle",
+        ):
+            st.session_state["rule_summary_sort_asc"] = not st.session_state["rule_summary_sort_asc"]
+            st.rerun()
+    with fc4:
+        _dates_parsed = pd.to_datetime(rule_df["date"], errors="coerce")
+        _min_date = _dates_parsed.min().date()
+        _max_date = _dates_parsed.max().date()
+        date_range = st.date_input(
+            "Filter by date range",
+            value=(_min_date, _max_date),
+            min_value=_min_date,
+            max_value=_max_date,
+            key="rule_summary_date_filter",
+        )
+    sort_asc = st.session_state["rule_summary_sort_asc"]
+
+    filtered = rule_df.copy()
+    if sel_cats:
+        filtered = filtered[filtered["category"].isin(sel_cats)]
+    if rule_kw.strip():
+        filtered = filtered[
+            filtered["rule"].str.contains(rule_kw.strip(), case=False, na=False)
+        ]
+    if isinstance(date_range, (list, tuple)) and len(date_range) == 2:
+        _d0, _d1 = date_range
+        _fdates = pd.to_datetime(filtered["date"], errors="coerce")
+        filtered = filtered[(_fdates >= pd.Timestamp(_d0)) & (_fdates <= pd.Timestamp(_d1))]
+    return sel_acct_type, filtered, sort_asc
+
+
+def _render_rule_table(filtered: pd.DataFrame, sort_asc: bool) -> None:
+    summary = (
+        filtered.groupby(["rule", "category"], as_index=False)
+        .agg(
+            first_date=("date", "min"),
+            last_date=("date", "max"),
+            total_transactions=("amount", "count"),
+            mean=("amount", "mean"),
+            total_value=("amount", "sum"),
+        )
+        .sort_values("total_value", ascending=sort_asc)
+    )
+    summary["mean"] = summary["mean"].map(_format_eu_decimal)
+    summary["total_value"] = summary["total_value"].map(_format_eu_decimal)
+    summary = summary.rename(
+        columns={
+            "rule": "Rule",
+            "category": "Category",
+            "first_date": "First date",
+            "last_date": "Last date",
+            "total_transactions": "Transactions",
+            "mean": "Mean (€)",
+            "total_value": "Total (€)",
+        }
+    )
+    st.dataframe(
+        summary,
+        width="stretch",
+        height=min(500, 40 + len(summary) * 35),
+        column_config={
+            "Mean (€)": st.column_config.TextColumn(alignment="right"),
+            "Total (€)": st.column_config.TextColumn(alignment="right"),
+            "Transactions": st.column_config.NumberColumn(alignment="right"),
+        },
+        hide_index=True,
+    )
+
+
+def _render_filtered_transactions(filtered: pd.DataFrame, sel_acct_type: str, cfg: dict) -> None:
+    st.subheader("Filtered transactions")
+    if sel_acct_type == "joint":
+        enriched = enrich_transactions_split(filtered, cfg)
+        _numeric_cols = [c for c in ("amount", "total A", "total B", "net") if c in enriched.columns]
+        _text_right_cols = [c for c in ("% A", "% B") if c in enriched.columns]
+        st.dataframe(
+            enriched,
+            width="stretch",
+            height=min(600, 40 + len(enriched) * 35),
+            column_config={
+                **{c: st.column_config.NumberColumn(alignment="right", format="%.2f") for c in _numeric_cols},
+                **{c: st.column_config.TextColumn(alignment="right") for c in _text_right_cols},
+            },
+            hide_index=True,
+        )
+    else:
+        disp_cols = [c for c in ("id", "date", "description", "amount", "category", "rule", "direction", "source", "yyyymm") if c in filtered.columns]
+        st.dataframe(
+            filtered[disp_cols].sort_values("date", ascending=False),
+            width="stretch",
+            height=min(600, 40 + len(filtered) * 35),
+            column_config={"amount": st.column_config.NumberColumn(alignment="right", format="%.2f")},
+            hide_index=True,
+        )
 
 
 def _render_rule_summary(df: pd.DataFrame, cfg: dict) -> None:
@@ -300,127 +461,10 @@ def _render_rule_summary(df: pd.DataFrame, cfg: dict) -> None:
             rule_df["account_type"] = "joint"
         rule_df["account_type"] = rule_df["account_type"].fillna("joint").astype(str)
 
-        acct_types = sorted(rule_df["account_type"].unique().tolist())
-        fa0, fa1, fa2, fa3, fa4 = st.columns([1, 1, 2, 1, 2])
-        with fa0:
-            sel_acct_type = st.selectbox(
-                "Account type",
-                options=acct_types,
-                index=acct_types.index("joint") if "joint" in acct_types else 0,
-                key="rule_summary_acct_type",
-            )
-        rule_df = rule_df[rule_df["account_type"] == sel_acct_type]
-
-        all_categories = sorted(rule_df["category"].unique().tolist())
-        with fa1:
-            sel_cats = st.multiselect(
-                "Filter by category",
-                options=all_categories,
-                default=[],
-                key="rule_summary_cat_filter",
-            )
-        fc2, fc3, fc4 = fa2, fa3, fa4
-        with fc2:
-            rule_kw = st.text_input(
-                "Filter by rule (keyword)",
-                value="",
-                key="rule_summary_rule_filter",
-            )
-        with fc3:
-            if "rule_summary_sort_asc" not in st.session_state:
-                st.session_state["rule_summary_sort_asc"] = True
-            st.write("")  # vertical alignment
-            if st.button(
-                "↑ Most negative first" if st.session_state["rule_summary_sort_asc"] else "↓ Most positive first",
-                key="rule_summary_sort_toggle",
-            ):
-                st.session_state["rule_summary_sort_asc"] = not st.session_state["rule_summary_sort_asc"]
-                st.rerun()
-        with fc4:
-            _dates_parsed = pd.to_datetime(rule_df["date"], errors="coerce")
-            _min_date = _dates_parsed.min().date()
-            _max_date = _dates_parsed.max().date()
-            date_range = st.date_input(
-                "Filter by date range",
-                value=(_min_date, _max_date),
-                min_value=_min_date,
-                max_value=_max_date,
-                key="rule_summary_date_filter",
-            )
-        sort_asc = st.session_state["rule_summary_sort_asc"]
-
-        filtered = rule_df.copy()
-        if sel_cats:
-            filtered = filtered[filtered["category"].isin(sel_cats)]
-        if rule_kw.strip():
-            filtered = filtered[
-                filtered["rule"].str.contains(rule_kw.strip(), case=False, na=False)
-            ]
-        if isinstance(date_range, (list, tuple)) and len(date_range) == 2:
-            _d0, _d1 = date_range
-            _fdates = pd.to_datetime(filtered["date"], errors="coerce")
-            filtered = filtered[(_fdates >= pd.Timestamp(_d0)) & (_fdates <= pd.Timestamp(_d1))]
+        sel_acct_type, filtered, sort_asc = _render_rule_filters(rule_df)
 
         if not filtered.empty:
-            summary = (
-                filtered.groupby(["rule", "category"], as_index=False)
-                .agg(
-                    first_date=("date", "min"),
-                    last_date=("date", "max"),
-                    total_transactions=("amount", "count"),
-                    mean=("amount", "mean"),
-                    total_value=("amount", "sum"),
-                )
-                .sort_values("total_value", ascending=sort_asc)
-            )
-            summary["mean"] = summary["mean"].map(_format_eu_decimal)
-            summary["total_value"] = summary["total_value"].map(_format_eu_decimal)
-            summary = summary.rename(
-                columns={
-                    "rule": "Rule",
-                    "category": "Category",
-                    "first_date": "First date",
-                    "last_date": "Last date",
-                    "total_transactions": "Transactions",
-                    "mean": "Mean (€)",
-                    "total_value": "Total (€)",
-                }
-            )
-            st.dataframe(
-                summary,
-                width="stretch",
-                height=min(500, 40 + len(summary) * 35),
-                column_config={
-                    "Mean (€)": st.column_config.TextColumn(alignment="right"),
-                    "Total (€)": st.column_config.TextColumn(alignment="right"),
-                    "Transactions": st.column_config.NumberColumn(alignment="right"),
-                },
-                hide_index=True,
-            )
-
-            st.subheader("Filtered transactions")
-            if sel_acct_type == "joint":
-                enriched = enrich_transactions_split(filtered, cfg)
-                _numeric_cols = [c for c in ("amount", "total A", "total B", "net") if c in enriched.columns]
-                _text_right_cols = [c for c in ("% A", "% B") if c in enriched.columns]
-                st.dataframe(
-                    enriched,
-                    width="stretch",
-                    height=min(600, 40 + len(enriched) * 35),
-                    column_config={
-                        **{c: st.column_config.NumberColumn(alignment="right", format="%.2f") for c in _numeric_cols},
-                        **{c: st.column_config.TextColumn(alignment="right") for c in _text_right_cols},
-                    },
-                    hide_index=True,
-                )
-            else:
-                disp_cols = [c for c in ("id", "date", "description", "amount", "category", "rule", "direction", "source", "yyyymm") if c in filtered.columns]
-                st.dataframe(
-                    filtered[disp_cols].sort_values("date", ascending=False),
-                    width="stretch",
-                    height=min(600, 40 + len(filtered) * 35),
-                    column_config={"amount": st.column_config.NumberColumn(alignment="right", format="%.2f")},
-                    hide_index=True,
-                )
+            _render_rule_table(filtered, sort_asc)
+            _render_filtered_transactions(filtered, sel_acct_type, cfg)
         else:
             st.info("No rules match the current filters.")
