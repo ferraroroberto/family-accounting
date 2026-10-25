@@ -253,13 +253,6 @@ def insert_transactions(
     return added, skipped
 
 
-def fetch_all_transactions(conn: sqlite3.Connection) -> list[sqlite3.Row]:
-    cur = conn.execute(
-        "SELECT * FROM transactions ORDER BY date ASC, id ASC"
-    )
-    return list(cur.fetchall())
-
-
 def count_transactions(conn: sqlite3.Connection) -> int:
     row = conn.execute("SELECT COUNT(*) FROM transactions").fetchone()
     return int(row[0]) if row else 0

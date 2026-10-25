@@ -180,26 +180,6 @@ def _row_headers(sheet: _SheetLike, ri: int) -> list[str]:
     return [_cell_str(sheet.cell_value(ri, ci)) for ci in range(sheet.ncols)]
 
 
-def _find_col(headers: list[str], label: str) -> int | None:
-    """Return column index for *label* (normalized, skips blank headers).
-
-    Match order: (1) exact, (2) label is substring of header, (3) non-empty
-    header is substring of label.
-    """
-    want = _norm_header(label)
-    if not want:
-        return None
-    for ci, h in enumerate(headers):
-        hn = _norm_header(h)
-        if hn and hn == want:
-            return ci
-    for ci, h in enumerate(headers):
-        hn = _norm_header(h)
-        if hn and (want in hn or hn in want):
-            return ci
-    return None
-
-
 def _find_header_row(sheet: _SheetLike, max_scan: int = 50) -> tuple[int, dict[str, int]]:
     """Scan rows to find the CaixaBank header row.
 
