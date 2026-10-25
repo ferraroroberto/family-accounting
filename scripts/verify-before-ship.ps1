@@ -36,7 +36,11 @@
                              dated heading or a changelog heading, beyond the committed
                              baseline. Exit 3 = "not confirmed" (git unusable, a non-UTF-8
                              file, an unclosed fence): a failure, never a pass.
-      8. pytest            - the unit suite
+      8. comment ratchet   - scripts/comment_ratchet.py: fails when a source file's count of
+                             `#NNN` issue references in comments rises above the committed
+                             baseline. Exit 3 = "not confirmed" (git unusable, a file that
+                             cannot be scanned): a failure, never a pass.
+      9. pytest            - the unit suite
 
     Anchors to the repo root, so run it from anywhere:
       powershell -File scripts/verify-before-ship.ps1
@@ -74,6 +78,7 @@ Invoke-Stage "doc refs ratchet" { & $py "scripts/doc_refs_ratchet.py" }
 Invoke-Stage "dead code ratchet" { & $py "scripts/dead_code_ratchet.py" }
 Invoke-Stage "static ratchet" { & $py "scripts/static_ratchet.py" }
 Invoke-Stage "docs ratchet" { & $py "scripts/docs_ratchet.py" }
+Invoke-Stage "comment ratchet" { & $py "scripts/comment_ratchet.py" }
 Invoke-Stage "pytest"            { & $py -m pytest }
 
 Write-Host ""
