@@ -1,7 +1,4 @@
 {
   "version": 1,
-  "entries": [
-    {"key": "src/database.py", "names": ["fetch_all_transactions"]},
-    {"key": "src/parsers/caixabank.py", "names": ["_find_col"]}
-  ]
+  "entries": []
 }
