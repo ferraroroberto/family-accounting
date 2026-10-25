@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pandas as pd
 import streamlit as st
 
@@ -190,6 +192,97 @@ def _finalize_keywords_with_stats(
     return sorted_kws, skipped_dupes, new_n
 
 
+def _save_keywords(
+    cfg_path: Path,
+    rules_key: str,
+    widgets: dict[str, str],
+    session_stats_key: str,
+    session_reclass_key: str,
+) -> bool:
+    """Write the edited keywords to config, reclassify the database and rerun.
+
+    Returns False when the config could not be saved (the error is already shown).
+    """
+    base = load_config(cfg_path)
+    cr = base.setdefault(rules_key, {})
+    stats: dict[str, dict[str, object]] = {}
+    for key in _RULE_KEYS:
+        prev_block = cr.get(key) or {}
+        raw_prev = prev_block.get("keywords")
+        prev_kws = raw_prev if isinstance(raw_prev, list) else []
+        block = dict(prev_block)
+        kws, skipped_dupes, new_n = _finalize_keywords_with_stats(widgets[key], prev_kws)
+        block["keywords"] = kws
+        if "case_sensitive" not in block:
+            block["case_sensitive"] = False
+        cr[key] = block
+        stats[key] = {"new": new_n, "duplicates_skipped": skipped_dupes}
+    try:
+        save_config(base, cfg_path)
+    except Exception as e:
+        st.error(str(e))
+        return False
+    st.session_state[session_stats_key] = stats
+    clear_data_caches()
+
+    dbp = default_db_path()
+    if dbp.is_file():
+        fresh = load_config(cfg_path)
+        st.session_state[session_reclass_key] = reclassify_database(fresh)
+    else:
+        st.session_state[session_reclass_key] = None
+
+    st.success("Saved and reclassified.")
+    st.rerun()
+    return True
+
+
+def _render_keyword_save_stats(kw_stats: dict[str, dict[str, object]]) -> None:
+    cfg_labels = get_config()
+    st.caption("Last save: keyword changes")
+    for key in _RULE_KEYS:
+        label = cfg_labels.get("categories", {}).get(key, {}).get("label", key)
+        d = kw_stats[key]
+        dup_list = d["duplicates_skipped"]
+        if not isinstance(dup_list, list):
+            dup_list = []
+        n_dup = len(dup_list)
+        if n_dup == 0:
+            dup_phrase = "no duplicates skipped"
+        elif n_dup == 1:
+            dup_phrase = f"1 duplicate skipped: `{dup_list[0]}`"
+        else:
+            shown = ", ".join(f"`{t}`" for t in dup_list)
+            dup_phrase = f"{n_dup} duplicates skipped: {shown}"
+        st.markdown(
+            f"- **{label}** (`{key}`): **{d['new']}** new · {dup_phrase}"
+        )
+
+
+def _render_reclass_summary(r: dict) -> None:
+    st.caption("Last save: reclassify summary")
+    st.write(
+        f"Touched **{r['rows_touched']}** rows · **{r['rows_changed']}** category/direction changes."
+    )
+    transitions: dict[str, int] = r.get("transitions") or {}
+    transition_rows: dict[str, list[dict]] = r.get("transition_rows") or {}
+    if transitions:
+        st.caption("Changes by transition")
+        rows_sorted = sorted(transitions.items(), key=lambda x: -x[1])
+        for label, count in rows_sorted:
+            with st.expander(f"`{label}` — **{count}** row{'s' if count != 1 else ''}"):
+                detail = transition_rows.get(label) or []
+                for item in detail:
+                    amt = item["amount"]
+                    amt_str = f"{amt:+.2f}" if amt is not None else "—"
+                    st.markdown(f"- `{amt_str}` &nbsp; {item['description']}")
+    category_counts: dict[str, int] = r.get("category_counts") or {}
+    if category_counts:
+        st.caption("Final category distribution")
+        for cat, count in sorted(category_counts.items(), key=lambda x: -x[1]):
+            st.markdown(f"- **{cat}**: {count}")
+
+
 def _render_keyword_editor(
     cfg: dict,
     rules_key: str,
@@ -222,83 +315,149 @@ def _render_keyword_editor(
         )
 
     if st.button("Save and reclassify", type="primary", key=f"btn_{tab_prefix}_save"):
-        base = load_config(cfg_path)
-        cr = base.setdefault(rules_key, {})
-        stats: dict[str, dict[str, object]] = {}
-        for key in _RULE_KEYS:
-            prev_block = cr.get(key) or {}
-            raw_prev = prev_block.get("keywords")
-            prev_kws = raw_prev if isinstance(raw_prev, list) else []
-            block = dict(prev_block)
-            kws, skipped_dupes, new_n = _finalize_keywords_with_stats(widgets[key], prev_kws)
-            block["keywords"] = kws
-            if "case_sensitive" not in block:
-                block["case_sensitive"] = False
-            cr[key] = block
-            stats[key] = {"new": new_n, "duplicates_skipped": skipped_dupes}
-        try:
-            save_config(base, cfg_path)
-        except Exception as e:
-            st.error(str(e))
+        if not _save_keywords(cfg_path, rules_key, widgets, session_stats_key, session_reclass_key):
             return
-        st.session_state[session_stats_key] = stats
-        clear_data_caches()
-
-        dbp = default_db_path()
-        if dbp.is_file():
-            fresh = load_config(cfg_path)
-            st.session_state[session_reclass_key] = reclassify_database(fresh)
-        else:
-            st.session_state[session_reclass_key] = None
-
-        st.success("Saved and reclassified.")
-        st.rerun()
 
     if st.session_state.get(session_stats_key):
-        kw_stats = st.session_state[session_stats_key]
-        cfg_labels = get_config()
-        st.caption("Last save: keyword changes")
-        for key in _RULE_KEYS:
-            label = cfg_labels.get("categories", {}).get(key, {}).get("label", key)
-            d = kw_stats[key]
-            dup_list = d["duplicates_skipped"]
-            if not isinstance(dup_list, list):
-                dup_list = []
-            n_dup = len(dup_list)
-            if n_dup == 0:
-                dup_phrase = "no duplicates skipped"
-            elif n_dup == 1:
-                dup_phrase = f"1 duplicate skipped: `{dup_list[0]}`"
-            else:
-                shown = ", ".join(f"`{t}`" for t in dup_list)
-                dup_phrase = f"{n_dup} duplicates skipped: {shown}"
-            st.markdown(
-                f"- **{label}** (`{key}`): **{d['new']}** new · {dup_phrase}"
-            )
+        _render_keyword_save_stats(st.session_state[session_stats_key])
 
     if st.session_state.get(session_reclass_key):
-        r = st.session_state[session_reclass_key]
-        st.caption("Last save: reclassify summary")
-        st.write(
-            f"Touched **{r['rows_touched']}** rows · **{r['rows_changed']}** category/direction changes."
+        _render_reclass_summary(st.session_state[session_reclass_key])
+
+
+def _opt_all(values: pd.Series) -> list[str]:
+    u = sorted(
+        {str(x) for x in values.dropna().unique() if str(x).strip()},
+        key=str.lower,
+    )
+    return ["(All)"] + u
+
+
+def _render_tx_filters(df_tx: pd.DataFrame) -> tuple[str, str, str, str, str, str, object, object]:
+    """Render the transaction filter widgets; return ``(account, category, rule, direction, source, q, d0, d1)``."""
+    d_parsed = pd.to_datetime(df_tx["date"], errors="coerce")
+    valid_dates = d_parsed.dropna()
+    if valid_dates.empty:
+        d_min = d_max = pd.Timestamp.now().normalize()
+    else:
+        d_min = valid_dates.min().normalize()
+        d_max = valid_dates.max().normalize()
+
+    # Account type selector (default joint)
+    acct_type_opts = _opt_all(df_tx["account_type"])
+    default_acct_idx = acct_type_opts.index("joint") if "joint" in acct_type_opts else 0
+
+    ft0, fc1, fc2, fc3, fc4 = st.columns(5)
+    with ft0:
+        acct_type_sel = st.selectbox(
+            "Account type",
+            acct_type_opts,
+            index=default_acct_idx,
+            key="cfg_tx_acct_type",
         )
-        transitions: dict[str, int] = r.get("transitions") or {}
-        transition_rows: dict[str, list[dict]] = r.get("transition_rows") or {}
-        if transitions:
-            st.caption("Changes by transition")
-            rows_sorted = sorted(transitions.items(), key=lambda x: -x[1])
-            for label, count in rows_sorted:
-                with st.expander(f"`{label}` — **{count}** row{'s' if count != 1 else ''}"):
-                    detail = transition_rows.get(label) or []
-                    for item in detail:
-                        amt = item["amount"]
-                        amt_str = f"{amt:+.2f}" if amt is not None else "—"
-                        st.markdown(f"- `{amt_str}` &nbsp; {item['description']}")
-        category_counts: dict[str, int] = r.get("category_counts") or {}
-        if category_counts:
-            st.caption("Final category distribution")
-            for cat, count in sorted(category_counts.items(), key=lambda x: -x[1]):
-                st.markdown(f"- **{cat}**: {count}")
+    with fc1:
+        cat_opts = _opt_all(df_tx["category"])
+        cat_sel = st.selectbox("Category", cat_opts, key="cfg_tx_category")
+    with fc2:
+        rule_opts = _opt_all(df_tx["rule"].fillna("default"))
+        rule_sel = st.selectbox("Rule", rule_opts, key="cfg_tx_rule")
+    with fc3:
+        dir_opts = _opt_all(df_tx["direction"])
+        dir_sel = st.selectbox("Direction", dir_opts, key="cfg_tx_direction")
+    with fc4:
+        src_opts = _opt_all(df_tx["source"])
+        src_sel = st.selectbox("Source", src_opts, key="cfg_tx_source")
+
+    fd0, fd1, fdesc = st.columns([1, 1, 2])
+    with fd0:
+        d_start = st.date_input(
+            "From date",
+            value=d_min.date(),
+            min_value=d_min.date(),
+            max_value=d_max.date(),
+            key="cfg_tx_date_from",
+        )
+    with fd1:
+        d_end = st.date_input(
+            "To date",
+            value=d_max.date(),
+            min_value=d_min.date(),
+            max_value=d_max.date(),
+            key="cfg_tx_date_to",
+        )
+    with fdesc:
+        desc_filter = st.text_input(
+            "Description contains",
+            value="",
+            key="cfg_tx_description",
+            placeholder="Substring match (case-insensitive)",
+        )
+
+    d0, d1 = (d_start, d_end) if d_start <= d_end else (d_end, d_start)
+    return acct_type_sel, cat_sel, rule_sel, dir_sel, src_sel, desc_filter.strip(), d0, d1
+
+
+def _render_transaction_explorer(df_tx: pd.DataFrame, df_raw: pd.DataFrame) -> None:
+    cfg_tx = get_config()
+    pa, pb = partner_names(cfg_tx)
+    st.caption(
+        f"**net**: joint account is funded 50/50; ideal share uses category rules for expenses "
+        f"(contributions are neutral). Positive **net** ⇒ **{pa}** owes **{pb}**; "
+        f"negative **net** ⇒ **{pb}** owes **{pa}**. Split columns only shown for joint transactions."
+    )
+
+    if "account_type" not in df_tx.columns:
+        df_tx["account_type"] = "joint"
+    df_tx["account_type"] = df_tx["account_type"].fillna("joint").astype(str)
+
+    acct_type_sel, cat_sel, rule_sel, dir_sel, src_sel, q, d0, d1 = _render_tx_filters(df_tx)
+
+    filtered = _apply_tx_filters(
+        df_tx, acct_type_sel, cat_sel, rule_sel, dir_sel, src_sel, q, d0, d1
+    )
+    sorted_filtered = filtered.sort_values(["date", "id"], ascending=[False, False]).head(500)
+    is_joint_view = (acct_type_sel == "joint")
+
+    if is_joint_view:
+        tx_disp = enrich_transactions_split(sorted_filtered, cfg_tx)
+    else:
+        tx_disp = sorted_filtered
+    st.dataframe(tx_disp, width="stretch", height=400)
+
+    st.divider()
+    _render_manual_override(sorted_filtered)
+
+    st.divider()
+    st.subheader("Raw data explorer")
+    st.caption(
+        "All database columns for the same filtered selection above. "
+        "Includes CaixaBank raw fields (`cb_*`), hash, and timestamps."
+    )
+
+    raw_filtered = _apply_tx_filters(
+        df_raw, acct_type_sel, cat_sel, rule_sel, dir_sel, src_sel, q, d0, d1
+    )
+    st.dataframe(raw_filtered.head(500), width="stretch", height=400)
+
+
+def _render_transactions() -> None:
+    dbp_tx = default_db_path()
+    if not dbp_tx.is_file():
+        st.info("No database yet. Use **Import data** to load bank exports.")
+        return
+
+    conn_tx = connect(dbp_tx)
+    init_db(conn_tx)
+    df_tx = load_transactions_df(conn_tx)
+    df_raw = pd.read_sql_query(
+        "SELECT * FROM transactions ORDER BY date DESC, id DESC", conn_tx
+    )
+    conn_tx.close()
+
+    if df_tx.empty:
+        st.info("No transactions. Import data first.")
+    else:
+        _render_transaction_explorer(df_tx, df_raw)
 
 
 def render() -> None:
@@ -344,124 +503,4 @@ def render() -> None:
         "date range, and description. Up to 500 rows after filters (newest first)."
     )
 
-    dbp_tx = default_db_path()
-    if not dbp_tx.is_file():
-        st.info("No database yet. Use **Import data** to load bank exports.")
-    else:
-        conn_tx = connect(dbp_tx)
-        init_db(conn_tx)
-        df_tx = load_transactions_df(conn_tx)
-        df_raw = pd.read_sql_query(
-            "SELECT * FROM transactions ORDER BY date DESC, id DESC", conn_tx
-        )
-        conn_tx.close()
-
-        if df_tx.empty:
-            st.info("No transactions. Import data first.")
-        else:
-            cfg_tx = get_config()
-            pa, pb = partner_names(cfg_tx)
-            st.caption(
-                f"**net**: joint account is funded 50/50; ideal share uses category rules for expenses "
-                f"(contributions are neutral). Positive **net** ⇒ **{pa}** owes **{pb}**; "
-                f"negative **net** ⇒ **{pb}** owes **{pa}**. Split columns only shown for joint transactions."
-            )
-
-            if "account_type" not in df_tx.columns:
-                df_tx["account_type"] = "joint"
-            df_tx["account_type"] = df_tx["account_type"].fillna("joint").astype(str)
-
-            def _opt_all(values: pd.Series) -> list[str]:
-                u = sorted(
-                    {str(x) for x in values.dropna().unique() if str(x).strip()},
-                    key=str.lower,
-                )
-                return ["(All)"] + u
-
-            d_parsed = pd.to_datetime(df_tx["date"], errors="coerce")
-            valid_dates = d_parsed.dropna()
-            if valid_dates.empty:
-                d_min = d_max = pd.Timestamp.now().normalize()
-            else:
-                d_min = valid_dates.min().normalize()
-                d_max = valid_dates.max().normalize()
-
-            # Account type selector (default joint)
-            acct_type_opts = _opt_all(df_tx["account_type"])
-            default_acct_idx = acct_type_opts.index("joint") if "joint" in acct_type_opts else 0
-
-            ft0, fc1, fc2, fc3, fc4 = st.columns(5)
-            with ft0:
-                acct_type_sel = st.selectbox(
-                    "Account type",
-                    acct_type_opts,
-                    index=default_acct_idx,
-                    key="cfg_tx_acct_type",
-                )
-            with fc1:
-                cat_opts = _opt_all(df_tx["category"])
-                cat_sel = st.selectbox("Category", cat_opts, key="cfg_tx_category")
-            with fc2:
-                rule_opts = _opt_all(df_tx["rule"].fillna("default"))
-                rule_sel = st.selectbox("Rule", rule_opts, key="cfg_tx_rule")
-            with fc3:
-                dir_opts = _opt_all(df_tx["direction"])
-                dir_sel = st.selectbox("Direction", dir_opts, key="cfg_tx_direction")
-            with fc4:
-                src_opts = _opt_all(df_tx["source"])
-                src_sel = st.selectbox("Source", src_opts, key="cfg_tx_source")
-
-            fd0, fd1, fdesc = st.columns([1, 1, 2])
-            with fd0:
-                d_start = st.date_input(
-                    "From date",
-                    value=d_min.date(),
-                    min_value=d_min.date(),
-                    max_value=d_max.date(),
-                    key="cfg_tx_date_from",
-                )
-            with fd1:
-                d_end = st.date_input(
-                    "To date",
-                    value=d_max.date(),
-                    min_value=d_min.date(),
-                    max_value=d_max.date(),
-                    key="cfg_tx_date_to",
-                )
-            with fdesc:
-                desc_filter = st.text_input(
-                    "Description contains",
-                    value="",
-                    key="cfg_tx_description",
-                    placeholder="Substring match (case-insensitive)",
-                )
-
-            d0, d1 = (d_start, d_end) if d_start <= d_end else (d_end, d_start)
-            q = desc_filter.strip()
-
-            filtered = _apply_tx_filters(
-                df_tx, acct_type_sel, cat_sel, rule_sel, dir_sel, src_sel, q, d0, d1
-            )
-            sorted_filtered = filtered.sort_values(["date", "id"], ascending=[False, False]).head(500)
-            is_joint_view = (acct_type_sel == "joint")
-
-            if is_joint_view:
-                tx_disp = enrich_transactions_split(sorted_filtered, cfg_tx)
-            else:
-                tx_disp = sorted_filtered
-            st.dataframe(tx_disp, width="stretch", height=400)
-
-            st.divider()
-            _render_manual_override(sorted_filtered)
-
-            st.divider()
-            st.subheader("Raw data explorer")
-            st.caption(
-                "All database columns for the same filtered selection above. "
-                "Includes CaixaBank raw fields (`cb_*`), hash, and timestamps."
-            )
-
-            raw_filtered = _apply_tx_filters(
-                df_raw, acct_type_sel, cat_sel, rule_sel, dir_sel, src_sel, q, d0, d1
-            )
-            st.dataframe(raw_filtered.head(500), width="stretch", height=400)
+    _render_transactions()

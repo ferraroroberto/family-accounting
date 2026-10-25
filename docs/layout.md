@@ -53,7 +53,7 @@ None declared: `extra_roots` in `.fleet.toml` is empty because every tracked roo
 
 ## Baselined offenders
 
-Four functions are over the 100-line limit and recorded at their current length in `.structure-ratchet-baseline.json`: `render` and `_render_rule_summary` in `app/dashboard.py`, and `render` and `_render_keyword_editor` in `app/configuration.py`. They may not grow; splitting one lowers the baseline with `--update-baseline`.
+None: `.structure-ratchet-baseline.json` is empty, so every file, function and directory is inside the limits. A UI tab stays under the function limit by keeping `render` a thin orchestrator over named `_render_*` helpers in the same module.
 
 ## Verify
 

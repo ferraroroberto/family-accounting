@@ -1,9 +1,4 @@
 {
   "version": 1,
-  "entries": [
-    {"key": "fn:app/configuration.py:_render_keyword_editor", "lines": 109},
-    {"key": "fn:app/configuration.py:render", "lines": 164},
-    {"key": "fn:app/dashboard.py:_render_rule_summary", "lines": 136},
-    {"key": "fn:app/dashboard.py:render", "lines": 174}
-  ]
+  "entries": []
 }
