@@ -5,3 +5,4 @@ xlrd>=2.0
 plotly>=5.18
 jsonschema>=4.20
 pytest>=8.0
+ruff>=0.15

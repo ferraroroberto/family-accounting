@@ -24,12 +24,10 @@ def parse_revolut_csv(
     df = pd.read_csv(path, encoding=enc)
     col_map = layout.get("columns") or {}
     # Default Revolut column names
-    c_type = col_map.get("type", "Type")
     c_started = col_map.get("started_date", "Started Date")
     c_completed = col_map.get("completed_date", "Completed Date")
     c_desc = col_map.get("description", "Description")
     c_amount = col_map.get("amount", "Amount")
-    c_currency = col_map.get("currency", "Currency")
     c_state = col_map.get("state", "State")
     c_balance = col_map.get("balance", "Balance")
 
