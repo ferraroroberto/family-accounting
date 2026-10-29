@@ -18,25 +18,14 @@ Canonical instructions for AI coding agents working in this repository. Claude C
 Streamlit app for tracking shared household expenses between two partners and computing monthly compensation balances.
 See `README.md` for setup, layout, and usage.
 
-## Structure ratchet
+## Ratchets
 
-- **A structure ratchet gates `scripts/verify-before-ship.ps1`.** It runs the vendored `scripts/structure_ratchet.py` (byte-for-byte from project-scaffolding; re-vendor with `/propagate-vendored structure_ratchet`, never edit) and fails when a file passes 1,000 lines, a function 100 lines or a flat directory 40 modules and is new or above its entry in `.structure-ratchet-baseline.json`, when `src` imports `app`, or when the root folders do not match `shape = "streamlit"` plus `extra_roots` in `.fleet.toml`. The baseline is empty: split a long function into named helpers in the same module rather than recording it. Only `--allow-additions` raises the baseline, and that shows in the diff. Exit 3 means "not confirmed" and fails the gate. Where code goes: [`docs/layout.md`](docs/layout.md).
-
-## Static ratchet
-
-- **A static ratchet gates `scripts/verify-before-ship.ps1`.** It runs the vendored `scripts/static_ratchet.py` (byte-for-byte from project-scaffolding; re-vendor with `/propagate-vendored static_ratchet`, never edit) and fails on a duplicated block, an unused import or variable, or a likely-bug or security pattern that is not in `.static-ratchet-baseline.json`. The baseline is empty: fix a new finding rather than recording it. It needs Node (`npx`) and `ruff` in `.venv`; exit 3 means "not confirmed" and fails the gate.
-
-## Docs ratchet
-
-- **A docs ratchet gates `scripts/verify-before-ship.ps1`.** It runs the vendored `scripts/docs_ratchet.py` (byte-for-byte from project-scaffolding; re-vendor with `/propagate-vendored docs_ratchet`, never edit) and fails when the root `README.md` passes 40 KiB, or when `README.md` or a `docs/**/*.md` file carries an issue reference, a dated heading or a changelog heading that is not in `.docs-ratchet-baseline.json`. The baseline is empty: state the present-tense why in words instead of citing an issue. Exit 3 means "not confirmed" and fails the gate.
-
-## Comment ratchet
-
-- **A comment ratchet gates `scripts/verify-before-ship.ps1`.** It runs the vendored `scripts/comment_ratchet.py` (byte-for-byte from project-scaffolding; re-vendor with `/propagate-vendored comment_ratchet`, never edit) and fails when a product-code file carries more `#NNN` issue references in comments than `.comment-ratchet-baseline.json` records. The baseline is empty: a comment states the present-tense why, and history lives in the issue and `git log`. Exit 3 means "not confirmed" and fails the gate.
-
-## Conventions ratchet
-
-- **A conventions ratchet gates `scripts/verify-before-ship.ps1`.** It runs the vendored `scripts/conventions_ratchet.py` (byte-for-byte from project-scaffolding; re-vendor with `/propagate-vendored conventions_ratchet`, never edit) and fails when a file has more hits than `.conventions-ratchet-baseline.json` records for `no-window` (a subprocess spawn without `CREATE_NO_WINDOW`), `logging-not-print` (a `print()` in `app/` or `src/`; command-line modules are exempt) or `no-drive-path` (a string literal starting with a drive letter). `secret-compare` and `git-wrapper` stay off because the repo has no such helper. The baseline is empty: fix a hit, or mark a deliberate exception with a reasoned `# <rule>-exempt: <why>` comment. Exit 3 means "not confirmed" and fails the gate.
+- **Five vendored ratchets gate `scripts/verify-before-ship.ps1`.** Each script is byte-for-byte from project-scaffolding: re-vendor with `/propagate-vendored <name>_ratchet`, never edit. Exit 3 means "not confirmed" and fails the gate. Every baseline is empty: fix a finding rather than recording it; only `--allow-additions` raises a baseline, and that shows in the diff.
+- **Structure** (`scripts/structure_ratchet.py`): fails when a file passes 1,000 lines, a function 100 lines or a flat directory 40 modules and is new or above its entry in `.structure-ratchet-baseline.json`, when `src` imports `app`, or when the root folders do not match `shape = "streamlit"` plus `extra_roots` in `.fleet.toml`. Split a long function into named helpers in the same module. Where code goes: [`docs/layout.md`](docs/layout.md).
+- **Static** (`scripts/static_ratchet.py`): fails on a duplicated block, an unused import or variable, or a likely-bug or security pattern not in `.static-ratchet-baseline.json`. Needs Node (`npx`) and `ruff` in `.venv`.
+- **Docs** (`scripts/docs_ratchet.py`): fails when the root `README.md` passes 40 KiB, or when `README.md` or a `docs/**/*.md` file carries an issue reference, a dated heading or a changelog heading not in `.docs-ratchet-baseline.json`. State the present-tense why in words instead of citing an issue.
+- **Comment** (`scripts/comment_ratchet.py`): fails when a product-code file carries more `#NNN` issue references in comments than `.comment-ratchet-baseline.json` records. A comment states the present-tense why; history lives in the issue and `git log`.
+- **Conventions** (`scripts/conventions_ratchet.py`): fails when a file has more hits than `.conventions-ratchet-baseline.json` records for `no-window` (a subprocess spawn without `CREATE_NO_WINDOW`), `logging-not-print` (a `print()` in `app/` or `src/`; command-line modules are exempt) or `no-drive-path` (a string literal starting with a drive letter). `secret-compare` and `git-wrapper` stay off because the repo has no such helper. Mark a deliberate exception with a reasoned `# <rule>-exempt: <why>` comment.
 
 ## Internal architecture
 
