@@ -23,52 +23,7 @@ All personal data (partner names, income figures, classification keywords) live 
 
 ## Project Structure
 
-```
-family-accounting/
-├── app/                        # Streamlit UI package
-│   ├── streamlit_app.py        # entry point: sidebar + tabs
-│   ├── dashboard.py            # Dashboard tab: charts and transaction table
-│   ├── import_data.py          # Import tab: ingest bank files, reclassify
-│   ├── configuration.py        # Configuration tab: edit keywords, view transactions
-│   ├── data_loader.py          # Streamlit-cached config helpers
-│   └── .streamlit/
-│       └── config.toml         # theme (dark, blue accent)
-│
-├── src/                        # Business logic (no Streamlit)
-│   ├── calculator.py           # share formulas and compensation math
-│   ├── classifier.py           # keyword-based transaction classifier
-│   ├── config_manager.py       # load / validate / save config.json
-│   ├── database.py             # SQLite schema, queries, migrations
-│   ├── ingest.py               # orchestrate parse → classify → insert
-│   ├── logger.py               # shared logging setup
-│   └── parsers/
-│       ├── caixabank.py        # CaixaBank XLS/XLSX parser (auto-detects layout)
-│       └── revolut.py          # Revolut CSV parser
-│
-├── scripts/                    # CLI entry points (no Streamlit)
-│   ├── import_bank_files.py    # run the configured imports; --dry-run
-│   └── classify_triage.py      # unclassified report, keyword vetting, balance
-│
-├── tests/                      # pytest suite
-│   ├── test_calculator.py
-│   ├── test_caixabank_xlsx.py
-│   ├── test_classifier.py
-│   ├── test_configuration_keywords.py
-│   ├── test_database.py
-│   ├── test_integration.py
-│   ├── test_parsers.py
-│   ├── test_reports.py
-│   └── test_source_resolution.py
-│
-├── config.example.json         # neutral example — committed to repo
-├── config.json                 # actual config with personal data — gitignored
-├── data/expenses.db            # SQLite database — gitignored
-├── requirements.txt
-├── launch_app.bat              # Windows launcher
-└── pytest.ini
-```
-
-Where new code goes, and the structure ratchet that guards it: [`docs/layout.md`](docs/layout.md).
+See [`docs/layout.md`](docs/layout.md) for the canonical directory tree, where new code goes, and the structure ratchet that guards it.
 
 ---
 
@@ -377,20 +332,24 @@ The matched partner is the one whose name appears in the transaction description
 Everything the UI does to the data is also reachable headlessly, for runbooks and scripted updates. Run from the project root so `src/` is importable.
 
 ```bash
-# Import the configured sources (same as "Import all files"). Idempotent.
-python -m scripts.import_bank_files
-python -m scripts.import_bank_files --dry-run     # parse + classify, write nothing
+# Windows
+.\.venv\Scripts\python.exe -m scripts.import_bank_files
+.\.venv\Scripts\python.exe -m scripts.import_bank_files --dry-run     # parse + classify, write nothing
+
+# macOS / Linux
+./.venv/bin/python -m scripts.import_bank_files
+./.venv/bin/python -m scripts.import_bank_files --dry-run
 
 # How much spending is unclassified, and what it costs the report
-python -m scripts.classify_triage --summary --since 2026-04-03
-python -m scripts.classify_triage --unclassified
+.\.venv\Scripts\python.exe -m scripts.classify_triage --summary --since 2026-04-03
+.\.venv\Scripts\python.exe -m scripts.classify_triage --unclassified
 
 # Vet candidate keywords BEFORE adding them — matching is plain substring,
 # so short keywords capture unrelated rows ("bp" matches "stripe…bppqydx")
-python -m scripts.classify_triage --check "sorli,cepsa,bp"
+.\.venv\Scripts\python.exe -m scripts.classify_triage --check "sorli,cepsa,bp"
 
 # Monthly compensation table + running balance
-python -m scripts.classify_triage --compensation
+.\.venv\Scripts\python.exe -m scripts.classify_triage --compensation
 ```
 
 Unclassified **joint** rows are excluded from the compensation maths, so they understate what is owed — `--summary` reports that share explicitly rather than letting it pass as a clean run.
@@ -398,7 +357,10 @@ Unclassified **joint** rows are excluded from the compensation maths, so they un
 ## Testing
 
 ```bash
-pytest
+# Windows
+.\.venv\Scripts\python.exe -m pytest
+# macOS / Linux
+./.venv/bin/python -m pytest
 ```
 
 Several tests require `config.json` to be present and skip automatically when it is absent. Tests that depend on local bank files in `tmp/input/` also skip if the files are not present.
