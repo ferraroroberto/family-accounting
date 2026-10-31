@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
@@ -11,6 +12,9 @@ from typing import Any
 from src.cb_columns import CB_COLUMN_NAMES, CB_DETAIL_COLS
 from src.classifier import classify_direction
 from src.config_manager import project_root
+from src.logger import get_logger
+
+log = get_logger(__name__)
 
 
 def default_db_path() -> Path:
@@ -99,24 +103,39 @@ def _ensure_caixabank_detail_columns(conn: sqlite3.Connection) -> None:
             conn.execute("ALTER TABLE transactions ADD COLUMN %s %s" % (name, typ))
 
 
-def _migrate_v1_lowercase_and_hashes(conn: sqlite3.Connection) -> None:
-    """One-time: lowercase descriptions, recompute hashes (canonical dedup)."""
-    cur = conn.execute("SELECT id, source, date, amount, description FROM transactions")
-    rows = cur.fetchall()
+def _migrate_v1_lowercase_descriptions(conn: sqlite3.Connection) -> None:
+    """One-time: lowercase descriptions so the canonical hash key is stable."""
     now = datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
-    for row in rows:
+    for row in conn.execute("SELECT id, description FROM transactions").fetchall():
         desc = (row["description"] or "").strip().lower()
-        h = transaction_hash(row["source"], row["date"], row["amount"], desc)
-        try:
-            conn.execute(
-                "UPDATE transactions SET description = ?, hash = ?, updated_at = ? WHERE id = ?",
-                (desc, h, now, row["id"]),
-            )
-        except sqlite3.IntegrityError:
-            conn.execute(
-                "UPDATE transactions SET description = ?, updated_at = ? WHERE id = ?",
-                (desc, now, row["id"]),
-            )
+        conn.execute(
+            "UPDATE transactions SET description = ?, updated_at = ? WHERE id = ?",
+            (desc, now, row["id"]),
+        )
+
+
+def _migrate_v2_balance_keyed_hashes(conn: sqlite3.Connection) -> int:
+    """One-time: rehash every row with its discriminator; returns rows rehashed.
+
+    Stored rows are already unique on the old key, so each gets occurrence 0 —
+    the same discriminator a fresh import of its export assigns.
+    The hash updates and the ``user_version`` bump share one transaction: a
+    failure leaves the old hashes and the old version together.
+    """
+    rows = conn.execute(
+        "SELECT id, source, date, amount, description, balance FROM transactions ORDER BY id"
+    ).fetchall()
+    next_discriminator = _discriminator_source()
+    for row in rows:
+        h = transaction_hash(
+            row["source"], row["date"], row["amount"], row["description"],
+            next_discriminator(
+                row["source"], row["date"], row["amount"], row["description"], row["balance"]
+            ),
+        )
+        conn.execute("UPDATE transactions SET hash = ? WHERE id = ?", (h, row["id"]))
+    conn.execute("PRAGMA user_version = 2")
+    return len(rows)
 
 
 def init_db(conn: sqlite3.Connection) -> None:
@@ -129,23 +148,62 @@ def init_db(conn: sqlite3.Connection) -> None:
     conn.commit()
     ver = conn.execute("PRAGMA user_version").fetchone()[0]
     if ver < 1:
-        _migrate_v1_lowercase_and_hashes(conn)
+        _migrate_v1_lowercase_descriptions(conn)
         conn.commit()
-        conn.execute("PRAGMA user_version = 1")
-        conn.commit()
+    if ver < 2:
+        try:
+            rehashed = _migrate_v2_balance_keyed_hashes(conn)
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        log.info("✅ Rehashed %d transactions with balance-keyed dedup hashes", rehashed)
     conn.execute(
         "UPDATE transactions SET rule = 'default' WHERE rule IS NULL OR trim(coalesce(rule, '')) = ''"
     )
     conn.commit()
 
 
-def transaction_hash(source: str, date_str: str, amount: float, description: str) -> str:
-    import hashlib
-
+def transaction_hash(
+    source: str, date_str: str, amount: float, description: str, discriminator: str
+) -> str:
     d = description.strip().lower()
-    key = f"{source}|{date_str}|{amount:.6f}|{d}"
+    key = f"{source}|{date_str}|{amount:.6f}|{d}|{discriminator}"
     return hashlib.sha256(key.encode("utf-8")).hexdigest()
 
+
+def _discriminator_source():
+    """Return ``next(source, date, amount, description, balance)`` giving each row's discriminator.
+
+    Two real payments share day, amount and description, so the running balance
+    after the row tells them apart: a bank reproduces it identically in every
+    export covering the row. Rows that still tie (a bank reports one balance for
+    a batch of identical postings, or the row carries no balance) are numbered
+    in file order. That is stable across overlapping exports because an export
+    always holds whole days, and the tied rows are interchangeable.
+    """
+    seen: Counter[tuple[Any, ...]] = Counter()
+
+    def next_discriminator(
+        source: str, date_str: str, amount: float, description: str, balance: float | None
+    ) -> str:
+        base = "n" if balance is None else f"b{balance + 0.0:.2f}"
+        key = (source, date_str, amount, description, base)
+        occurrence = seen[key]
+        seen[key] += 1
+        return f"{base}#{occurrence}"
+
+    return next_discriminator
+
+
+def assign_hashes(rows: list[dict[str, Any]]) -> None:
+    """Set ``hash`` on parsed rows (descriptions already normalised), in file order."""
+    next_discriminator = _discriminator_source()
+    for r in rows:
+        r["hash"] = transaction_hash(
+            r["source"], r["date"], r["amount"], r["description"],
+            next_discriminator(r["source"], r["date"], r["amount"], r["description"], r.get("balance")),
+        )
 
 
 _INSERT_CORE_COLS: tuple[str, ...] = (

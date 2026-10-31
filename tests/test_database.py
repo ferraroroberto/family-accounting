@@ -24,7 +24,7 @@ def _make_row(source: str, date: str = "2024-01-01", amount: float = -10.0, desc
         "date": date,
         "description": desc,
         "amount": amount,
-        "hash": transaction_hash(source, date, amount, desc),
+        "hash": transaction_hash(source, date, amount, desc, "n0"),
     }
 
 
@@ -193,7 +193,7 @@ def test_manual_override_pins_a_row_against_reclassification(tmp_path) -> None:
         "amount": 5000.0, "category": "contribution", "direction": "contribution",
         "partner": "partner_a", "manual_override": 0, "yyyymm": "202605",
         "rule": "contribution", "account_type": "joint",
-        "hash": transaction_hash("revolut_joint", "2026-05-19", 5000.0, desc),
+        "hash": transaction_hash("revolut_joint", "2026-05-19", 5000.0, desc, "n0"),
     }])
     tx_id = conn.execute("SELECT id FROM transactions").fetchone()["id"]
 
@@ -257,7 +257,7 @@ def test_manual_override_direction_matches_the_classifier(tmp_path) -> None:
         desc = f"row {i}"
         insert_transactions(conn, [{
             "source": "s", "date": "2026-05-19", "description": desc, "amount": amount,
-            "account_type": acct, "hash": transaction_hash("s", "2026-05-19", amount, desc),
+            "account_type": acct, "hash": transaction_hash("s", "2026-05-19", amount, desc, "n0"),
         }])
         tx_id = conn.execute("SELECT id FROM transactions WHERE description = ?", (desc,)).fetchone()["id"]
         assert set_manual_override(conn, tx_id, category) is True
