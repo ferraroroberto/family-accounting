@@ -8,6 +8,8 @@ from pathlib import Path
 from collections import Counter
 from typing import Any
 
+from src.cb_columns import CB_COLUMN_NAMES, CB_DETAIL_COLS
+from src.classifier import classify_direction
 from src.config_manager import project_root
 
 
@@ -32,28 +34,7 @@ CREATE TABLE IF NOT EXISTS transactions (
     rule            TEXT DEFAULT 'default',
     account_type    TEXT DEFAULT 'joint',
     extra_json      TEXT,
-    cb_oficina          TEXT,
-    cb_divisa           TEXT,
-    cb_f_operacion      TEXT,
-    cb_f_valor          TEXT,
-    cb_ingreso          REAL,
-    cb_gasto            REAL,
-    cb_saldo_pos        REAL,
-    cb_saldo_neg        REAL,
-    cb_concepto_comun   TEXT,
-    cb_concepto_propio  TEXT,
-    cb_referencia1      TEXT,
-    cb_referencia2      TEXT,
-    cb_cc1              TEXT,
-    cb_cc2              TEXT,
-    cb_cc3              TEXT,
-    cb_cc4              TEXT,
-    cb_cc5              TEXT,
-    cb_cc6              TEXT,
-    cb_cc7              TEXT,
-    cb_cc8              TEXT,
-    cb_cc9              TEXT,
-    cb_cc10             TEXT,
+__CB_COLUMNS__
     hash            TEXT UNIQUE NOT NULL,
     created_at      TEXT DEFAULT (datetime('now')),
     updated_at      TEXT DEFAULT (datetime('now'))
@@ -74,7 +55,10 @@ CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(date);
 CREATE INDEX IF NOT EXISTS idx_transactions_category ON transactions(category);
 CREATE INDEX IF NOT EXISTS idx_transactions_yyyymm ON transactions(yyyymm);
 CREATE INDEX IF NOT EXISTS idx_transactions_hash ON transactions(hash);
-"""
+""".replace(
+    "__CB_COLUMNS__",
+    "\n".join(f"    {name:<19} {typ}," for name, typ in CB_DETAIL_COLS),
+)
 
 
 def connect(db_path: Path | None = None) -> sqlite3.Connection:
@@ -107,28 +91,10 @@ def _ensure_account_type_column(conn: sqlite3.Connection) -> None:
         conn.execute("UPDATE transactions SET account_type = 'joint' WHERE account_type IS NULL")
 
 
-# Nullable CaixaBank-only columns (Revolut / compact layout leave NULL).
-_CB_DETAIL_COLS: tuple[tuple[str, str], ...] = (
-    ("cb_oficina", "TEXT"),
-    ("cb_divisa", "TEXT"),
-    ("cb_f_operacion", "TEXT"),
-    ("cb_f_valor", "TEXT"),
-    ("cb_ingreso", "REAL"),
-    ("cb_gasto", "REAL"),
-    ("cb_saldo_pos", "REAL"),
-    ("cb_saldo_neg", "REAL"),
-    ("cb_concepto_comun", "TEXT"),
-    ("cb_concepto_propio", "TEXT"),
-    ("cb_referencia1", "TEXT"),
-    ("cb_referencia2", "TEXT"),
-    *(("cb_cc%d" % i, "TEXT") for i in range(1, 11)),
-)
-
-
 def _ensure_caixabank_detail_columns(conn: sqlite3.Connection) -> None:
     cur = conn.execute("PRAGMA table_info(transactions)")
     cols = {row[1] for row in cur.fetchall()}
-    for name, typ in _CB_DETAIL_COLS:
+    for name, typ in CB_DETAIL_COLS:
         if name not in cols:
             conn.execute("ALTER TABLE transactions ADD COLUMN %s %s" % (name, typ))
 
@@ -181,6 +147,18 @@ def transaction_hash(source: str, date_str: str, amount: float, description: str
     return hashlib.sha256(key.encode("utf-8")).hexdigest()
 
 
+
+_INSERT_CORE_COLS: tuple[str, ...] = (
+    "source", "date", "value_date", "description", "amount", "balance",
+    "category", "direction", "partner", "manual_override", "yyyymm", "rule",
+    "account_type", "extra_json",
+)
+_INSERT_COLS = (*_INSERT_CORE_COLS, *CB_COLUMN_NAMES, "hash", "updated_at")
+_INSERT_SQL = (
+    f"INSERT INTO transactions ({', '.join(_INSERT_COLS)}) "
+    f"VALUES ({', '.join('?' * len(_INSERT_COLS))})"
+)
+
 def insert_transactions(
     conn: sqlite3.Connection,
     rows: list[dict[str, Any]],
@@ -193,18 +171,7 @@ def insert_transactions(
         h = r["hash"]
         try:
             conn.execute(
-                """
-                INSERT INTO transactions (
-                    source, date, value_date, description, amount, balance,
-                    category, direction, partner, manual_override, yyyymm, rule, account_type, extra_json,
-                    cb_oficina, cb_divisa, cb_f_operacion, cb_f_valor,
-                    cb_ingreso, cb_gasto, cb_saldo_pos, cb_saldo_neg,
-                    cb_concepto_comun, cb_concepto_propio, cb_referencia1, cb_referencia2,
-                    cb_cc1, cb_cc2, cb_cc3, cb_cc4, cb_cc5,
-                    cb_cc6, cb_cc7, cb_cc8, cb_cc9, cb_cc10,
-                    hash, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
+                _INSERT_SQL,
                 (
                     r["source"],
                     r["date"],
@@ -220,28 +187,7 @@ def insert_transactions(
                     r.get("rule", "default"),
                     r.get("account_type", "joint"),
                     r.get("extra_json"),
-                    r.get("cb_oficina"),
-                    r.get("cb_divisa"),
-                    r.get("cb_f_operacion"),
-                    r.get("cb_f_valor"),
-                    r.get("cb_ingreso"),
-                    r.get("cb_gasto"),
-                    r.get("cb_saldo_pos"),
-                    r.get("cb_saldo_neg"),
-                    r.get("cb_concepto_comun"),
-                    r.get("cb_concepto_propio"),
-                    r.get("cb_referencia1"),
-                    r.get("cb_referencia2"),
-                    r.get("cb_cc1"),
-                    r.get("cb_cc2"),
-                    r.get("cb_cc3"),
-                    r.get("cb_cc4"),
-                    r.get("cb_cc5"),
-                    r.get("cb_cc6"),
-                    r.get("cb_cc7"),
-                    r.get("cb_cc8"),
-                    r.get("cb_cc9"),
-                    r.get("cb_cc10"),
+                    *(r.get(c) for c in CB_COLUMN_NAMES),
                     h,
                     now,
                 ),
@@ -323,13 +269,7 @@ def set_manual_override(
     if row is None:
         return False
 
-    amount = float(row["amount"])
-    if category == "contribution":
-        direction = "contribution"
-    elif (row["account_type"] or "joint") == "personal":
-        direction = "expense" if amount < 0 else "income"
-    else:
-        direction = "expense" if amount < 0 else "contribution" if category == "other" else "expense"
+    direction = classify_direction(float(row["amount"]), category, row["account_type"] or "joint")
 
     now = datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
     conn.execute(

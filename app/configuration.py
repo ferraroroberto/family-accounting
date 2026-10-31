@@ -7,14 +7,19 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
-from app._tx_view import enrich_transactions_split, load_transactions_df
-from app.data_loader import clear_data_caches, get_config
+from app._reclass_view import render_reclass_summary
+from app._tx_view import enrich_transactions_split
+from app.data_loader import (
+    cached_raw_transactions_df,
+    cached_transactions_df,
+    clear_data_caches,
+    get_config,
+)
 from src.config_manager import default_config_path, load_config, partner_names, save_config
 from src.database import (
     clear_manual_override,
     connect,
     default_db_path,
-    init_db,
     list_manual_overrides,
     set_manual_override,
 )
@@ -23,6 +28,12 @@ from src.ingest import reclassify_database
 
 _RULE_KEYS = ("kids", "food", "health", "house", "equal")
 _ALL_CATEGORIES = ("kids", "food", "health", "house", "equal", "contribution", "other")
+
+# Rows shown in the filtered transaction tables (newest first).
+_TABLE_ROW_CAP = 500
+# A selectbox with more options than this gets slow to open and search, so the
+# override picker offers only the newest rows of the filtered selection.
+_PICKER_ROW_CAP = 200
 
 
 def _render_manual_override(candidates: pd.DataFrame) -> None:
@@ -36,14 +47,15 @@ def _render_manual_override(candidates: pd.DataFrame) -> None:
     st.caption(
         "Pin a single transaction to a category. Pinned rows are skipped by every "
         "future reclassification, so the correction survives keyword edits. "
-        "Pick from the filtered rows above."
+        f"Pick from the filtered rows above (the picker lists the newest {_PICKER_ROW_CAP}; "
+        "narrow the filters to reach older rows)."
     )
 
     dbp = default_db_path()
     if candidates.empty:
         st.info("No rows in the current filter to override.")
     else:
-        opts = candidates.head(200)
+        opts = candidates.head(_PICKER_ROW_CAP)
         labels = {
             int(r.id): f"#{int(r.id)} · {r.date} · {float(r.amount):,.2f} · {str(r.description)[:60]}"
             for r in opts.itertuples()
@@ -119,14 +131,9 @@ def _apply_tx_filters(
     d0: object,
     d1: object,
 ) -> pd.DataFrame:
-    """Apply the standard transaction filter pipeline to *df* and return the filtered frame.
-
-    The ``account_type`` filter is skipped if the column is absent — this allows
-    the helper to be used for both the enriched view (which always has the column)
-    and the raw-data explorer (where the column may be absent on older databases).
-    """
+    """Apply the standard transaction filter pipeline to *df* and return the filtered frame."""
     out = df
-    if acct_type_sel != "(All)" and "account_type" in df.columns:
+    if acct_type_sel != "(All)":
         out = out[out["account_type"].astype(str) == acct_type_sel]
     if cat_sel != "(All)":
         out = out[out["category"].astype(str) == cat_sel]
@@ -259,30 +266,6 @@ def _render_keyword_save_stats(kw_stats: dict[str, dict[str, object]]) -> None:
         )
 
 
-def _render_reclass_summary(r: dict) -> None:
-    st.caption("Last save: reclassify summary")
-    st.write(
-        f"Touched **{r['rows_touched']}** rows · **{r['rows_changed']}** category/direction changes."
-    )
-    transitions: dict[str, int] = r.get("transitions") or {}
-    transition_rows: dict[str, list[dict]] = r.get("transition_rows") or {}
-    if transitions:
-        st.caption("Changes by transition")
-        rows_sorted = sorted(transitions.items(), key=lambda x: -x[1])
-        for label, count in rows_sorted:
-            with st.expander(f"`{label}` — **{count}** row{'s' if count != 1 else ''}"):
-                detail = transition_rows.get(label) or []
-                for item in detail:
-                    amt = item["amount"]
-                    amt_str = f"{amt:+.2f}" if amt is not None else "—"
-                    st.markdown(f"- `{amt_str}` &nbsp; {item['description']}")
-    category_counts: dict[str, int] = r.get("category_counts") or {}
-    if category_counts:
-        st.caption("Final category distribution")
-        for cat, count in sorted(category_counts.items(), key=lambda x: -x[1]):
-            st.markdown(f"- **{cat}**: {count}")
-
-
 def _render_keyword_editor(
     cfg: dict,
     rules_key: str,
@@ -322,7 +305,8 @@ def _render_keyword_editor(
         _render_keyword_save_stats(st.session_state[session_stats_key])
 
     if st.session_state.get(session_reclass_key):
-        _render_reclass_summary(st.session_state[session_reclass_key])
+        st.caption("Last save: reclassify summary")
+        render_reclass_summary(st.session_state[session_reclass_key])
 
 
 def _opt_all(values: pd.Series) -> list[str]:
@@ -406,8 +390,6 @@ def _render_transaction_explorer(df_tx: pd.DataFrame, df_raw: pd.DataFrame) -> N
         f"negative **net** ⇒ **{pb}** owes **{pa}**. Split columns only shown for joint transactions."
     )
 
-    if "account_type" not in df_tx.columns:
-        df_tx["account_type"] = "joint"
     df_tx["account_type"] = df_tx["account_type"].fillna("joint").astype(str)
 
     acct_type_sel, cat_sel, rule_sel, dir_sel, src_sel, q, d0, d1 = _render_tx_filters(df_tx)
@@ -415,7 +397,7 @@ def _render_transaction_explorer(df_tx: pd.DataFrame, df_raw: pd.DataFrame) -> N
     filtered = _apply_tx_filters(
         df_tx, acct_type_sel, cat_sel, rule_sel, dir_sel, src_sel, q, d0, d1
     )
-    sorted_filtered = filtered.sort_values(["date", "id"], ascending=[False, False]).head(500)
+    sorted_filtered = filtered.sort_values(["date", "id"], ascending=[False, False]).head(_TABLE_ROW_CAP)
     is_joint_view = (acct_type_sel == "joint")
 
     if is_joint_view:
@@ -437,7 +419,7 @@ def _render_transaction_explorer(df_tx: pd.DataFrame, df_raw: pd.DataFrame) -> N
     raw_filtered = _apply_tx_filters(
         df_raw, acct_type_sel, cat_sel, rule_sel, dir_sel, src_sel, q, d0, d1
     )
-    st.dataframe(raw_filtered.head(500), width="stretch", height=400)
+    st.dataframe(raw_filtered.head(_TABLE_ROW_CAP), width="stretch", height=400)
 
 
 def _render_transactions() -> None:
@@ -446,13 +428,8 @@ def _render_transactions() -> None:
         st.info("No database yet. Use **Import data** to load bank exports.")
         return
 
-    conn_tx = connect(dbp_tx)
-    init_db(conn_tx)
-    df_tx = load_transactions_df(conn_tx)
-    df_raw = pd.read_sql_query(
-        "SELECT * FROM transactions ORDER BY date DESC, id DESC", conn_tx
-    )
-    conn_tx.close()
+    df_tx = cached_transactions_df(dbp_tx)
+    df_raw = cached_raw_transactions_df(dbp_tx)
 
     if df_tx.empty:
         st.info("No transactions. Import data first.")
@@ -500,7 +477,7 @@ def render() -> None:
     st.subheader("Transactions")
     st.caption(
         "Filter by account type, category, rule, direction, source, "
-        "date range, and description. Up to 500 rows after filters (newest first)."
+        f"date range, and description. Up to {_TABLE_ROW_CAP} rows after filters (newest first)."
     )
 
     _render_transactions()

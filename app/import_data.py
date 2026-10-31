@@ -5,6 +5,7 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
+from app._reclass_view import render_reclass_summary
 from app.data_loader import clear_data_caches, get_config
 from src.config_manager import default_config_path, load_config, resolve_source_file
 from src.ingest import import_all_configured, load_and_parse_source, reclassify_database
@@ -47,21 +48,6 @@ def _show_import_summary(res: dict) -> None:
         st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
 
 
-def _show_reclass_summary(res: dict) -> None:
-    st.write(
-        f"Touched **{res['rows_touched']}** rows without manual override · "
-        f"**{res['rows_changed']}** had category or direction changes."
-    )
-    tr = res.get("transitions") or {}
-    if tr:
-        st.caption("Changes (old category/direction → new, count)")
-        lines = sorted(f"`{k}`: **{n}**" for k, n in tr.items())
-        st.markdown("\n".join(lines))
-    if res.get("category_counts"):
-        st.caption("Resulting category distribution")
-        st.write(res["category_counts"])
-
-
 def render() -> None:
     st.header("Import data")
 
@@ -85,13 +71,13 @@ def render() -> None:
         try:
             p = resolve_source_file(cfg, s["file"])
         except FileNotFoundError as e:
-            st.write(f"- **{s['id']}** → `{s['file']}` — no match")
+            st.warning(f"**{s['id']}** → `{s['file']}` — no match")
             st.caption(str(e))
             continue
         if p.is_file():
             st.write(f"- **{s['id']}** → `{p.name}`")
         else:
-            st.write(f"- **{s['id']}** → `{s['file']}` — file not found")
+            st.warning(f"**{s['id']}** → `{s['file']}` — file not found")
 
     st.subheader("Import from configuration")
     if st.button("Import all files", type="primary", key="btn_import_all"):
@@ -129,7 +115,7 @@ def render() -> None:
 
     if st.session_state.get("last_reclass_summary"):
         st.subheader("Last reclassify summary")
-        _show_reclass_summary(st.session_state.last_reclass_summary)
+        render_reclass_summary(st.session_state.last_reclass_summary)
 
     st.subheader("Preview (local file)")
     which = st.selectbox("Source", options=[s["id"] for s in sources], key="prev_src")

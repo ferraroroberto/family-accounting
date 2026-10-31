@@ -223,3 +223,44 @@ def test_manual_override_on_missing_row_returns_false(tmp_path) -> None:
     init_db(conn)
     assert set_manual_override(conn, 99999, "other") is False
     conn.close()
+
+
+def test_cb_columns_have_one_source_for_schema_insert_and_null_skeleton(tmp_path) -> None:
+    """The DDL, the INSERT column list and the parser skeleton all follow CB_DETAIL_COLS."""
+    from src.cb_columns import CB_COLUMN_NAMES, CB_DETAIL_COLS, cb_null_row
+    from src.database import _INSERT_COLS, _INSERT_SQL, connect, init_db
+
+    conn = connect(tmp_path / "t.db")
+    init_db(conn)
+    table = {r[1]: r[2] for r in conn.execute("PRAGMA table_info(transactions)")}
+    conn.close()
+
+    assert {name: typ for name, typ in CB_DETAIL_COLS}.items() <= table.items()
+    assert set(cb_null_row()) == set(CB_COLUMN_NAMES)
+    assert all(v is None for v in cb_null_row().values())
+    assert _INSERT_SQL.count("?") == len(_INSERT_COLS)
+    assert set(_INSERT_COLS) <= set(table)
+
+
+def test_manual_override_direction_matches_the_classifier(tmp_path) -> None:
+    """A pinned row gets the direction classify_direction gives, for joint and personal accounts."""
+    from src.classifier import classify_direction
+    from src.database import connect, init_db, insert_transactions, set_manual_override, transaction_hash
+
+    conn = connect(tmp_path / "t.db")
+    init_db(conn)
+    cases = [
+        ("joint", -10.0, "other"), ("joint", 10.0, "other"), ("joint", 10.0, "food"),
+        ("personal", -10.0, "food"), ("personal", 10.0, "other"), ("joint", 10.0, "contribution"),
+    ]
+    for i, (acct, amount, category) in enumerate(cases):
+        desc = f"row {i}"
+        insert_transactions(conn, [{
+            "source": "s", "date": "2026-05-19", "description": desc, "amount": amount,
+            "account_type": acct, "hash": transaction_hash("s", "2026-05-19", amount, desc),
+        }])
+        tx_id = conn.execute("SELECT id FROM transactions WHERE description = ?", (desc,)).fetchone()["id"]
+        assert set_manual_override(conn, tx_id, category) is True
+        got = conn.execute("SELECT direction FROM transactions WHERE id = ?", (tx_id,)).fetchone()["direction"]
+        assert got == classify_direction(amount, category, acct)
+    conn.close()

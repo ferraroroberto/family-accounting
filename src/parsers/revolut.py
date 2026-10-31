@@ -8,7 +8,6 @@ from typing import Any
 
 import pandas as pd
 
-from src.database import transaction_hash
 
 
 def parse_revolut_csv(
@@ -56,7 +55,6 @@ def parse_revolut_csv(
             continue
         ds = op.date().isoformat()
         yyyymm = op.strftime("%Y%m")
-        h = transaction_hash(source_id, ds, amt, desc)
         rows.append(
             {
                 "source": source_id,
@@ -66,7 +64,6 @@ def parse_revolut_csv(
                 "amount": amt,
                 "balance": bal,
                 "yyyymm": yyyymm,
-                "hash": h,
                 "extra_json": None,
             }
         )

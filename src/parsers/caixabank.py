@@ -25,6 +25,8 @@ from typing import Any, Protocol
 import xlrd
 from xlrd.sheet import Sheet as XlrdSheet
 
+from src.cb_columns import cb_null_row
+
 
 # ---------------------------------------------------------------------------
 # Cell value helpers
@@ -261,17 +263,6 @@ def _find_header_row(sheet: _SheetLike, max_scan: int = 50) -> tuple[int, dict[s
 # Null skeleton for cb_* columns (Revolut rows leave these NULL)
 # ---------------------------------------------------------------------------
 
-_CB_NULL: dict[str, Any] = {
-    "cb_oficina": None, "cb_divisa": None,
-    "cb_f_operacion": None, "cb_f_valor": None,
-    "cb_ingreso": None, "cb_gasto": None,
-    "cb_saldo_pos": None, "cb_saldo_neg": None,
-    "cb_concepto_comun": None, "cb_concepto_propio": None,
-    "cb_referencia1": None, "cb_referencia2": None,
-    **{f"cb_cc{i}": None for i in range(1, 11)},
-}
-
-
 # ---------------------------------------------------------------------------
 # Row parsers
 # ---------------------------------------------------------------------------
@@ -302,8 +293,6 @@ def _parse_wide_rows(
     date_key: str,
 ) -> list[dict[str, Any]]:
     """Parse wide-format CaixaBank rows into canonical transaction dicts."""
-    from src.database import transaction_hash
-
     text_keys = [
         "oficina", "divisa", "concepto_comun", "concepto_propio",
         "referencia1", "referencia2",
@@ -341,7 +330,7 @@ def _parse_wide_rows(
 
         desc = _description_from_cc(cells)
         ds = op.isoformat()
-        cb: dict[str, Any] = dict(_CB_NULL)
+        cb: dict[str, Any] = cb_null_row()
         cb.update({
             "cb_oficina": cells.get("oficina") or None,
             "cb_divisa": cells.get("divisa") or None,
@@ -368,7 +357,6 @@ def _parse_wide_rows(
             "amount": amt,
             "balance": bal,
             "yyyymm": op.strftime("%Y%m"),
-            "hash": transaction_hash(source_id, ds, amt, desc),
             "extra_json": None,
             **cb,
         })
@@ -383,8 +371,6 @@ def _parse_compact_rows(
     source_id: str,
 ) -> list[dict[str, Any]]:
     """Parse compact-format (Fecha/Movimiento/Importe) CaixaBank rows."""
-    from src.database import transaction_hash
-
     rows: list[dict[str, Any]] = []
     for ri in range(start_row, sheet.nrows):
         op = _parse_date_cell(book, sheet.cell_value(ri, colmap["fecha"]))
@@ -407,9 +393,8 @@ def _parse_compact_rows(
             "amount": amt,
             "balance": bal,
             "yyyymm": op.strftime("%Y%m"),
-            "hash": transaction_hash(source_id, ds, amt, desc),
             "extra_json": None,
-            **_CB_NULL,
+            **cb_null_row(),
         })
     return rows
 
