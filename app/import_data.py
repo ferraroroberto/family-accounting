@@ -85,13 +85,13 @@ def render() -> None:
         try:
             p = resolve_source_file(cfg, s["file"])
         except FileNotFoundError as e:
-            st.write(f"- **{s['id']}** → `{s['file']}` — no match")
+            st.warning(f"**{s['id']}** → `{s['file']}` — no match")
             st.caption(str(e))
             continue
         if p.is_file():
             st.write(f"- **{s['id']}** → `{p.name}`")
         else:
-            st.write(f"- **{s['id']}** → `{s['file']}` — file not found")
+            st.warning(f"**{s['id']}** → `{s['file']}` — file not found")
 
     st.subheader("Import from configuration")
     if st.button("Import all files", type="primary", key="btn_import_all"):

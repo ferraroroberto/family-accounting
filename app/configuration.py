@@ -7,14 +7,18 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
-from app._tx_view import enrich_transactions_split, load_transactions_df
-from app.data_loader import clear_data_caches, get_config
+from app._tx_view import enrich_transactions_split
+from app.data_loader import (
+    cached_raw_transactions_df,
+    cached_transactions_df,
+    clear_data_caches,
+    get_config,
+)
 from src.config_manager import default_config_path, load_config, partner_names, save_config
 from src.database import (
     clear_manual_override,
     connect,
     default_db_path,
-    init_db,
     list_manual_overrides,
     set_manual_override,
 )
@@ -446,13 +450,8 @@ def _render_transactions() -> None:
         st.info("No database yet. Use **Import data** to load bank exports.")
         return
 
-    conn_tx = connect(dbp_tx)
-    init_db(conn_tx)
-    df_tx = load_transactions_df(conn_tx)
-    df_raw = pd.read_sql_query(
-        "SELECT * FROM transactions ORDER BY date DESC, id DESC", conn_tx
-    )
-    conn_tx.close()
+    df_tx = cached_transactions_df(dbp_tx)
+    df_raw = cached_raw_transactions_df(dbp_tx)
 
     if df_tx.empty:
         st.info("No transactions. Import data first.")

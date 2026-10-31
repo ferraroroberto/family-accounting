@@ -10,11 +10,11 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
-from app._tx_view import enrich_transactions_split, load_transactions_df
-from app.data_loader import get_config
+from app._tx_view import enrich_transactions_split
+from app.data_loader import cached_transactions_df, get_config
 from src.config_manager import partner_names
 from src.calculator import share_for_category
-from src.database import connect, default_db_path, init_db
+from src.database import default_db_path
 from src.reports import COMPENSATION_CATEGORIES, monthly_compensation_report
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -288,10 +288,7 @@ def render() -> None:
         st.info("No database yet. Use **Import data** to load bank exports.")
         return
 
-    conn = connect(dbp)
-    init_db(conn)
-    df = load_transactions_df(conn)
-    conn.close()
+    df = cached_transactions_df(dbp)
 
     if df.empty:
         st.info("No transactions. Import data first.")
