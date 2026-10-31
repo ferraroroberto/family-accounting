@@ -29,6 +29,12 @@ from src.ingest import reclassify_database
 _RULE_KEYS = ("kids", "food", "health", "house", "equal")
 _ALL_CATEGORIES = ("kids", "food", "health", "house", "equal", "contribution", "other")
 
+# Rows shown in the filtered transaction tables (newest first).
+_TABLE_ROW_CAP = 500
+# A selectbox with more options than this gets slow to open and search, so the
+# override picker offers only the newest rows of the filtered selection.
+_PICKER_ROW_CAP = 200
+
 
 def _render_manual_override(candidates: pd.DataFrame) -> None:
     """Pin one transaction to a category so reclassification leaves it alone.
@@ -41,14 +47,15 @@ def _render_manual_override(candidates: pd.DataFrame) -> None:
     st.caption(
         "Pin a single transaction to a category. Pinned rows are skipped by every "
         "future reclassification, so the correction survives keyword edits. "
-        "Pick from the filtered rows above."
+        f"Pick from the filtered rows above (the picker lists the newest {_PICKER_ROW_CAP}; "
+        "narrow the filters to reach older rows)."
     )
 
     dbp = default_db_path()
     if candidates.empty:
         st.info("No rows in the current filter to override.")
     else:
-        opts = candidates.head(200)
+        opts = candidates.head(_PICKER_ROW_CAP)
         labels = {
             int(r.id): f"#{int(r.id)} · {r.date} · {float(r.amount):,.2f} · {str(r.description)[:60]}"
             for r in opts.itertuples()
@@ -397,7 +404,7 @@ def _render_transaction_explorer(df_tx: pd.DataFrame, df_raw: pd.DataFrame) -> N
     filtered = _apply_tx_filters(
         df_tx, acct_type_sel, cat_sel, rule_sel, dir_sel, src_sel, q, d0, d1
     )
-    sorted_filtered = filtered.sort_values(["date", "id"], ascending=[False, False]).head(500)
+    sorted_filtered = filtered.sort_values(["date", "id"], ascending=[False, False]).head(_TABLE_ROW_CAP)
     is_joint_view = (acct_type_sel == "joint")
 
     if is_joint_view:
@@ -419,7 +426,7 @@ def _render_transaction_explorer(df_tx: pd.DataFrame, df_raw: pd.DataFrame) -> N
     raw_filtered = _apply_tx_filters(
         df_raw, acct_type_sel, cat_sel, rule_sel, dir_sel, src_sel, q, d0, d1
     )
-    st.dataframe(raw_filtered.head(500), width="stretch", height=400)
+    st.dataframe(raw_filtered.head(_TABLE_ROW_CAP), width="stretch", height=400)
 
 
 def _render_transactions() -> None:
@@ -477,7 +484,7 @@ def render() -> None:
     st.subheader("Transactions")
     st.caption(
         "Filter by account type, category, rule, direction, source, "
-        "date range, and description. Up to 500 rows after filters (newest first)."
+        f"date range, and description. Up to {_TABLE_ROW_CAP} rows after filters (newest first)."
     )
 
     _render_transactions()
