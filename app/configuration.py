@@ -131,14 +131,9 @@ def _apply_tx_filters(
     d0: object,
     d1: object,
 ) -> pd.DataFrame:
-    """Apply the standard transaction filter pipeline to *df* and return the filtered frame.
-
-    The ``account_type`` filter is skipped if the column is absent — this allows
-    the helper to be used for both the enriched view (which always has the column)
-    and the raw-data explorer (where the column may be absent on older databases).
-    """
+    """Apply the standard transaction filter pipeline to *df* and return the filtered frame."""
     out = df
-    if acct_type_sel != "(All)" and "account_type" in df.columns:
+    if acct_type_sel != "(All)":
         out = out[out["account_type"].astype(str) == acct_type_sel]
     if cat_sel != "(All)":
         out = out[out["category"].astype(str) == cat_sel]
@@ -395,8 +390,6 @@ def _render_transaction_explorer(df_tx: pd.DataFrame, df_raw: pd.DataFrame) -> N
         f"negative **net** ⇒ **{pb}** owes **{pa}**. Split columns only shown for joint transactions."
     )
 
-    if "account_type" not in df_tx.columns:
-        df_tx["account_type"] = "joint"
     df_tx["account_type"] = df_tx["account_type"].fillna("joint").astype(str)
 
     acct_type_sel, cat_sel, rule_sel, dir_sel, src_sel, q, d0, d1 = _render_tx_filters(df_tx)

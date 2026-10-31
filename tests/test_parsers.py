@@ -38,7 +38,7 @@ def test_caixabank_joint_parses() -> None:
     rows = parse_caixabank_file(p, "caixabank_joint", {"type": "auto"})
     assert len(rows) > 0
     r0 = rows[0]
-    assert "date" in r0 and "amount" in r0 and "hash" in r0
+    assert "date" in r0 and "amount" in r0 and "hash" not in r0
     assert r0["source"] == "caixabank_joint"
 
 

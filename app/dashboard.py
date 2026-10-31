@@ -55,51 +55,16 @@ def accent_gradient(n: int, base_hex: str | None = None) -> list[str]:
     return out
 
 
-def _format_yyyymm(ym: str | int | float) -> str:
-    if pd.isna(ym):
-        return ""
-    try:
-        if isinstance(ym, (int, float)) and not isinstance(ym, bool):
-            s = f"{int(ym):06d}"
-        else:
-            t = str(ym).strip()
-            s = f"{int(float(t)):06d}" if "." in t else t
-    except (ValueError, TypeError):
-        s = str(ym)
-    if len(s) != 6 or not s.isdigit():
-        return s
-    try:
-        dt = pd.to_datetime(s, format="%Y%m")
-        return dt.strftime("%b %Y")
-    except (ValueError, TypeError):
-        return s
-
-
-def _add_thousands_dot(int_digits: str) -> str:
-    """Group digits from the right with '.' (e.g. '9047992' -> '9.047.992')."""
-    if len(int_digits) <= 3:
-        return int_digits
-    parts: list[str] = []
-    for i in range(len(int_digits), 0, -3):
-        parts.append(int_digits[max(0, i - 3) : i])
-    return ".".join(reversed(parts))
+def _format_yyyymm(ym: str) -> str:
+    """``"202604"`` -> ``"Apr 2026"``; the report always builds ``month`` as a ``%Y%m`` string."""
+    return pd.to_datetime(ym, format="%Y%m").strftime("%b %Y")
 
 
 def _format_eu_decimal(value: object) -> str:
     """Thousands '.', decimal ',', two fractional digits (European-style)."""
     if value is None or pd.isna(value):
         return ""
-    try:
-        n = float(value)
-    except (TypeError, ValueError):
-        return str(value)
-    s = f"{n:.2f}"
-    neg = s.startswith("-")
-    if neg:
-        s = s[1:]
-    int_part, dec_part = s.split(".")
-    body = f"{_add_thousands_dot(int_part)},{dec_part}"
-    return f"-{body}" if neg else body
+    return f"{float(value):,.2f}".translate(str.maketrans(",.", ".,"))
 
 
 def _metric_card(label: str, value: str, caption_text: str) -> None:
@@ -115,18 +80,15 @@ def _metric_card(label: str, value: str, caption_text: str) -> None:
 def _split_joint_frames(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """Return ``(joint_df, expenses, contrib_df)`` for the joint-account views."""
     # Joint-only data for compensation calculations
-    if "account_type" in df.columns:
-        joint_df = df[df["account_type"] == "joint"].copy()
-    else:
-        joint_df = df.copy()
+    joint_df = df[df["account_type"] == "joint"].copy()
 
     # Spending = outflows excluding contributions (joint only)
-    contributions_mask = joint_df["category"] == "contribution" if "category" in joint_df.columns else pd.Series(False, index=joint_df.index)
+    contributions_mask = joint_df["category"] == "contribution"
     expenses = joint_df[(joint_df["amount"] < 0) & ~contributions_mask].copy()
     expenses["amount_abs"] = -expenses["amount"]
 
     # Contribution rows (joint only)
-    contrib_df = joint_df[contributions_mask].copy() if "category" in joint_df.columns else pd.DataFrame()
+    contrib_df = joint_df[contributions_mask].copy()
     return joint_df, expenses, contrib_df
 
 
@@ -454,8 +416,6 @@ def _render_rule_summary(df: pd.DataFrame, cfg: dict) -> None:
         rule_df = df.copy()
         rule_df["rule"] = rule_df["rule"].fillna("default").astype(str).str.lower()
         rule_df["category"] = rule_df["category"].fillna("").astype(str)
-        if "account_type" not in rule_df.columns:
-            rule_df["account_type"] = "joint"
         rule_df["account_type"] = rule_df["account_type"].fillna("joint").astype(str)
 
         sel_acct_type, filtered, sort_asc = _render_rule_filters(rule_df)
