@@ -15,7 +15,7 @@ All personal data (partner names, income figures, classification keywords) live 
 - **Monthly compensation report** — computes how much each partner owes the other each month, assuming the joint account is funded 50/50. Includes a `contributions_comp` column for partner fund transfers.
 - **Reclassification** — re-run classification rules on all non-manually-overridden transactions in one click (account-type-aware). Individual rows can be **pinned** to a category from the UI so a correction the keywords cannot express survives every future keyword edit.
 - **Refunds net against spend** — a `devolucion compra`, direct-debit reversal, or insurance reimbursement reduces the category it was credited back to, rather than being ignored.
-- **Duplicate prevention** — SHA-256 hash per transaction prevents double-imports across overlapping date-range exports. Re-running an import with the same files is a no-op, so exporting a wider date range than strictly needed is always safe.
+- **Duplicate prevention** — SHA-256 hash per transaction prevents double-imports across overlapping date-range exports. The hash covers source, day, amount, description and the running balance after the row, so two genuine identical payments on one day are both kept; rows that still tie (no balance, or one balance for a batch of identical postings) are numbered in file order. Re-running an import with the same files is a no-op, so exporting a wider date range than strictly needed is always safe.
 
 > **Operators:** the deployment-specific runbook — which bank export format to download, what to name the files, and how previous exports are archived — lives as `HANDOFF.md` beside the bank exports themselves, not in this repo (it contains local paths and account detail). This README documents the application; that file documents one installation of it.
 
@@ -269,7 +269,7 @@ The SQLite database (`data/expenses.db`) contains two tables:
 | `account_type` | TEXT | `joint` or `personal` — derived from account config |
 | `extra_json` | TEXT | Reserved for future parser metadata |
 | `cb_*` columns | varies | CaixaBank raw fields (NULL for Revolut rows) |
-| `hash` | TEXT UNIQUE | SHA-256 deduplication key |
+| `hash` | TEXT UNIQUE | SHA-256 deduplication key: source, day, amount, description, balance and occurrence among tied rows |
 | `created_at` / `updated_at` | TEXT | ISO timestamps |
 
 ### `import_log`

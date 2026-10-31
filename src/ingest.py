@@ -9,6 +9,7 @@ from typing import Any
 from src.classifier import classify_full
 from src.config_manager import load_config, resolve_source_file
 from src.database import (
+    assign_hashes,
     backfill_account_type_from_config,
     connect,
     default_db_path,
@@ -16,7 +17,6 @@ from src.database import (
     insert_transactions,
     log_import,
     reclassify_all,
-    transaction_hash,
 )
 from src.parsers.caixabank import parse_caixabank_file
 from src.parsers.revolut import parse_revolut_csv
@@ -69,7 +69,6 @@ def load_and_parse_source(
     for r in rows:
         desc = (r["description"] or "").strip().lower()
         r["description"] = desc
-        r["hash"] = transaction_hash(source_id, r["date"], r["amount"], desc)
         r["account_type"] = account_type
         cat, direction, rule, partner = classify_full(desc, r["amount"], cfg, account_type)
         r["category"] = cat
@@ -77,6 +76,7 @@ def load_and_parse_source(
         r["rule"] = rule
         r["partner"] = partner
         r["manual_override"] = 0
+    assign_hashes(rows)
     return rows
 
 
