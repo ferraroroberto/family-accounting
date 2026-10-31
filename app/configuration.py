@@ -7,6 +7,7 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
+from app._reclass_view import render_reclass_summary
 from app._tx_view import enrich_transactions_split
 from app.data_loader import (
     cached_raw_transactions_df,
@@ -263,30 +264,6 @@ def _render_keyword_save_stats(kw_stats: dict[str, dict[str, object]]) -> None:
         )
 
 
-def _render_reclass_summary(r: dict) -> None:
-    st.caption("Last save: reclassify summary")
-    st.write(
-        f"Touched **{r['rows_touched']}** rows · **{r['rows_changed']}** category/direction changes."
-    )
-    transitions: dict[str, int] = r.get("transitions") or {}
-    transition_rows: dict[str, list[dict]] = r.get("transition_rows") or {}
-    if transitions:
-        st.caption("Changes by transition")
-        rows_sorted = sorted(transitions.items(), key=lambda x: -x[1])
-        for label, count in rows_sorted:
-            with st.expander(f"`{label}` — **{count}** row{'s' if count != 1 else ''}"):
-                detail = transition_rows.get(label) or []
-                for item in detail:
-                    amt = item["amount"]
-                    amt_str = f"{amt:+.2f}" if amt is not None else "—"
-                    st.markdown(f"- `{amt_str}` &nbsp; {item['description']}")
-    category_counts: dict[str, int] = r.get("category_counts") or {}
-    if category_counts:
-        st.caption("Final category distribution")
-        for cat, count in sorted(category_counts.items(), key=lambda x: -x[1]):
-            st.markdown(f"- **{cat}**: {count}")
-
-
 def _render_keyword_editor(
     cfg: dict,
     rules_key: str,
@@ -326,7 +303,8 @@ def _render_keyword_editor(
         _render_keyword_save_stats(st.session_state[session_stats_key])
 
     if st.session_state.get(session_reclass_key):
-        _render_reclass_summary(st.session_state[session_reclass_key])
+        st.caption("Last save: reclassify summary")
+        render_reclass_summary(st.session_state[session_reclass_key])
 
 
 def _opt_all(values: pd.Series) -> list[str]:

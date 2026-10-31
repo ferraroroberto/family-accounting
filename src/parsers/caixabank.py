@@ -25,6 +25,8 @@ from typing import Any, Protocol
 import xlrd
 from xlrd.sheet import Sheet as XlrdSheet
 
+from src.cb_columns import cb_null_row
+
 
 # ---------------------------------------------------------------------------
 # Cell value helpers
@@ -261,17 +263,6 @@ def _find_header_row(sheet: _SheetLike, max_scan: int = 50) -> tuple[int, dict[s
 # Null skeleton for cb_* columns (Revolut rows leave these NULL)
 # ---------------------------------------------------------------------------
 
-_CB_NULL: dict[str, Any] = {
-    "cb_oficina": None, "cb_divisa": None,
-    "cb_f_operacion": None, "cb_f_valor": None,
-    "cb_ingreso": None, "cb_gasto": None,
-    "cb_saldo_pos": None, "cb_saldo_neg": None,
-    "cb_concepto_comun": None, "cb_concepto_propio": None,
-    "cb_referencia1": None, "cb_referencia2": None,
-    **{f"cb_cc{i}": None for i in range(1, 11)},
-}
-
-
 # ---------------------------------------------------------------------------
 # Row parsers
 # ---------------------------------------------------------------------------
@@ -341,7 +332,7 @@ def _parse_wide_rows(
 
         desc = _description_from_cc(cells)
         ds = op.isoformat()
-        cb: dict[str, Any] = dict(_CB_NULL)
+        cb: dict[str, Any] = cb_null_row()
         cb.update({
             "cb_oficina": cells.get("oficina") or None,
             "cb_divisa": cells.get("divisa") or None,
@@ -409,7 +400,7 @@ def _parse_compact_rows(
             "yyyymm": op.strftime("%Y%m"),
             "hash": transaction_hash(source_id, ds, amt, desc),
             "extra_json": None,
-            **_CB_NULL,
+            **cb_null_row(),
         })
     return rows
 

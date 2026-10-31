@@ -111,6 +111,15 @@ def classify_amount_hint(amount: float, category: str) -> str:
     return "expense"
 
 
+def classify_direction(amount: float, category: str, account_type: str = "joint") -> str:
+    """Direction for a row already assigned *category*; the one rule shared by the classifier and manual pins."""
+    if category == "contribution":
+        return "contribution"
+    if account_type == "personal":
+        return "expense" if amount < 0 else "income"
+    return classify_amount_hint(amount, category)
+
+
 def classify_full(
     description: str, amount: float, config: dict[str, Any], account_type: str = "joint"
 ) -> tuple[str, str, str, str | None]:
@@ -125,8 +134,7 @@ def classify_full(
     """
     if account_type == "personal":
         cat, rule = classify_description(description, config, "personal_classification_rules")
-        direction = "expense" if amount < 0 else "income"
-        return cat, direction, rule or "default", None
+        return cat, classify_direction(amount, cat, account_type), rule or "default", None
 
     # Joint account logic
     is_contrib, partner_key = classify_contribution(description, amount, config)

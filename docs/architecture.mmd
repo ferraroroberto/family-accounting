@@ -14,7 +14,8 @@ flowchart TB
     DASH["dashboard.py\nDashboard tab: metrics, pie chart,\nmonthly compensation table + charts"]
     IMPORTDATA["import_data.py\nImport tab: run imports, reclassify, preview"]
     CONFIGTAB["configuration.py\nConfiguration tab: edit keywords,\nfilterable transaction table,\nmanual override (pin a row's category)"]
-    LOADER["data_loader.py\n@st.cache_data config + cache-clear helpers"]
+    LOADER["data_loader.py\n@st.cache_data config + transaction frames\n(keyed on db mtime) + cache-clear helpers"]
+    RECLASSVIEW["_reclass_view.py\nreclassify-result renderer"]
     TXVIEW["_tx_view.py\nload + enrich transactions with\nideal-vs-actual split columns"]
   end
   ENTRY --> DASH
@@ -23,7 +24,9 @@ flowchart TB
   DASH --> LOADER
   DASH --> TXVIEW
   IMPORTDATA --> LOADER
+  IMPORTDATA --> RECLASSVIEW
   CONFIGTAB --> LOADER
+  CONFIGTAB --> RECLASSVIEW
   CONFIGTAB --> TXVIEW
 
   subgraph corelogic["src/ — business logic (no Streamlit import allowed)"]
@@ -34,6 +37,7 @@ flowchart TB
     REPORTS["reports.py\nmonthly_compensation_report\n(category net incl. refunds,\nplus contributions_comp)"]
     DB["database.py\nSQLite schema, connect/init_db,\ninsert + query helpers, dedup by hash,\nmanual-override pin/release"]
     LOGGER["logger.py\nshared logging setup"]
+    CBCOLS["cb_columns.py\ncb_* column list: single source for\nschema, insert and parser skeleton"]
     subgraph parsers["parsers/"]
       CAIXA["caixabank.py\nauto-detect header row,\nwide/compact XLS(X) layouts"]
       REVOLUT["revolut.py\nRevolut CSV, filters State==COMPLETED"]
@@ -61,6 +65,10 @@ flowchart TB
   INGEST --> REVOLUT
   INGEST --> LOGGER
   DB --> CFGMGR
+  DB --> CBCOLS
+  DB --> CLASSIFIER
+  CAIXA --> CBCOLS
+  LOADER --> DB
   REPORTS --> CALC
   REPORTS --> CFGMGR
 

@@ -9,7 +9,8 @@ family-accounting/
 │   ├── dashboard.py            # Dashboard tab: charts and transaction table
 │   ├── import_data.py          # Import tab: ingest bank files, reclassify
 │   ├── configuration.py        # Configuration tab: keywords and transactions
-│   ├── data_loader.py          # Streamlit-cached config helpers
+│   ├── data_loader.py          # Streamlit-cached config and transaction-frame helpers
+│   ├── _reclass_view.py        # reclassify-result renderer shared by the Import and Configuration tabs
 │   └── _tx_view.py             # transaction-view helpers shared by the Dashboard and Configuration tabs
 │
 ├── src/                        # business logic — never imports streamlit or app
@@ -17,6 +18,7 @@ family-accounting/
 │   ├── classifier.py           # keyword-based transaction classifier
 │   ├── config_manager.py       # load / validate / save config.json
 │   ├── database.py             # SQLite schema, queries, migrations
+│   ├── cb_columns.py           # the cb_* CaixaBank columns, defined once for schema, insert and parser
 │   ├── ingest.py               # orchestrate parse → classify → insert
 │   ├── reports.py              # monthly compensation report
 │   ├── logger.py               # shared logging setup
