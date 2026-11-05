@@ -2,5 +2,10 @@
   "version": 1,
   "band": {"files": 0, "functions": 1},
   "root_extras": [],
+  "shape_contract": {
+    "root_files": ["config.example.json"],
+    "redundant": [],
+    "folder_types": {}
+  },
   "entries": []
 }
