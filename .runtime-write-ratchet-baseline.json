@@ -1,7 +1,4 @@
 {
   "version": 1,
-  "entries": [
-    {"key": "src/config_manager.py", "counts": {"unresolved": 1}},
-    {"key": "src/database.py", "counts": {"unresolved": 2}}
-  ]
+  "entries": []
 }

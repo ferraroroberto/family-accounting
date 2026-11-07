@@ -27,7 +27,6 @@ from xlrd.sheet import Sheet as XlrdSheet
 
 from src.cb_columns import cb_null_row
 
-
 # ---------------------------------------------------------------------------
 # Cell value helpers
 # ---------------------------------------------------------------------------

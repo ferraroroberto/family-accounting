@@ -15,7 +15,12 @@ from app.data_loader import (
     clear_data_caches,
     get_config,
 )
-from src.config_manager import default_config_path, load_config, partner_names, save_config
+from src.config_manager import (
+    default_config_path,
+    load_config,
+    partner_names,
+    save_config,
+)
 from src.database import (
     clear_manual_override,
     connect,
@@ -24,7 +29,6 @@ from src.database import (
     set_manual_override,
 )
 from src.ingest import reclassify_database
-
 
 _RULE_KEYS = ("kids", "food", "health", "house", "equal")
 _ALL_CATEGORIES = ("kids", "food", "health", "house", "equal", "contribution", "other")

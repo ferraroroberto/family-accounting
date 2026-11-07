@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import hashlib
 import sqlite3
+from collections import Counter
 from datetime import UTC, datetime
 from pathlib import Path
-from collections import Counter
 from typing import Any
 
 from src.cb_columns import CB_COLUMN_NAMES, CB_DETAIL_COLS
@@ -67,7 +67,9 @@ CREATE INDEX IF NOT EXISTS idx_transactions_hash ON transactions(hash);
 
 def connect(db_path: Path | None = None) -> sqlite3.Connection:
     path = db_path or default_db_path()
+    # runtime-write-exempt: data/expenses.db is the app's own ledger; moving it would orphan the live database
     path.parent.mkdir(parents=True, exist_ok=True)
+    # runtime-write-exempt: same ledger file as the mkdir above
     conn = sqlite3.connect(str(path))
     conn.row_factory = sqlite3.Row
     return conn

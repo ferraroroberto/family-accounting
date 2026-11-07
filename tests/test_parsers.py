@@ -2,11 +2,12 @@ from pathlib import Path
 
 import pytest
 
-from src.parsers.caixabank import _description_from_cc
-from src.parsers.caixabank import _float_cell
-from src.parsers.caixabank import parse_caixabank_file
+from src.parsers.caixabank import (
+    _description_from_cc,
+    _float_cell,
+    parse_caixabank_file,
+)
 from src.parsers.revolut import parse_revolut_csv
-
 
 ROOT = Path(__file__).resolve().parents[1]
 

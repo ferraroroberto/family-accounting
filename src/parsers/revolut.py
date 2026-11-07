@@ -9,7 +9,6 @@ from typing import Any
 import pandas as pd
 
 
-
 def parse_revolut_csv(
     path: Path,
     source_id: str,
