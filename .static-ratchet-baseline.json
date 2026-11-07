@@ -1,19 +1,5 @@
 {
   "version": 1,
   "tools": {"jscpd": "5.4.0", "ruff": "0.17.2"},
-  "entries": [
-    {"key": "order:I001:app/configuration.py:from __future__ import annotations", "files": ["app/configuration.py"]},
-    {"key": "order:I001:app/dashboard.py:from __future__ import annotations", "files": ["app/dashboard.py"]},
-    {"key": "order:I001:src/database.py:from __future__ import annotations", "files": ["src/database.py"]},
-    {"key": "order:I001:src/ingest.py:from __future__ import annotations", "files": ["src/ingest.py"]},
-    {"key": "order:I001:src/parsers/caixabank.py:from __future__ import annotations", "files": ["src/parsers/caixabank.py"]},
-    {"key": "order:I001:src/parsers/revolut.py:from __future__ import annotations", "files": ["src/parsers/revolut.py"]},
-    {"key": "order:I001:tests/test_caixabank_xlsx.py:from __future__ import annotations", "files": ["tests/test_caixabank_xlsx.py"]},
-    {"key": "order:I001:tests/test_caixabank_xlsx.py:from pathlib import Path as P", "files": ["tests/test_caixabank_xlsx.py"]},
-    {"key": "order:I001:tests/test_classifier.py:import json", "files": ["tests/test_classifier.py"]},
-    {"key": "order:I001:tests/test_database.py:from __future__ import annotations", "files": ["tests/test_database.py"]},
-    {"key": "order:I001:tests/test_database.py:from src.classifier import classify_direction", "files": ["tests/test_database.py"]},
-    {"key": "order:I001:tests/test_integration.py:from __future__ import annotations", "files": ["tests/test_integration.py"]},
-    {"key": "order:I001:tests/test_parsers.py:from pathlib import Path", "files": ["tests/test_parsers.py"]}
-  ]
+  "entries": []
 }
