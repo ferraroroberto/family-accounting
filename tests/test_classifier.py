@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from src.classifier import classify_description, classify_full, classify_contribution
+from src.classifier import classify_contribution, classify_description, classify_full
 
 
 @pytest.fixture

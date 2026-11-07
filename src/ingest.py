@@ -18,10 +18,9 @@ from src.database import (
     log_import,
     reclassify_all,
 )
+from src.logger import get_logger
 from src.parsers.caixabank import parse_caixabank_file
 from src.parsers.revolut import parse_revolut_csv
-
-from src.logger import get_logger
 
 log = get_logger(__name__)
 

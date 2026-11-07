@@ -13,7 +13,6 @@ from src.database import (
 )
 from src.ingest import _build_source_account_type_map
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -245,7 +244,13 @@ def test_cb_columns_have_one_source_for_schema_insert_and_null_skeleton(tmp_path
 def test_manual_override_direction_matches_the_classifier(tmp_path) -> None:
     """A pinned row gets the direction classify_direction gives, for joint and personal accounts."""
     from src.classifier import classify_direction
-    from src.database import connect, init_db, insert_transactions, set_manual_override, transaction_hash
+    from src.database import (
+        connect,
+        init_db,
+        insert_transactions,
+        set_manual_override,
+        transaction_hash,
+    )
 
     conn = connect(tmp_path / "t.db")
     init_db(conn)

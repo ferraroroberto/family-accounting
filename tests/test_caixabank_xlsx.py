@@ -8,10 +8,13 @@ from pathlib import Path
 from openpyxl import Workbook
 from openpyxl.utils.datetime import to_excel
 
-from src.parsers.caixabank import _description_from_cc, _parse_date_cell, parse_caixabank_file
-from src.ingest import load_and_parse_source
 from src.config_manager import load_config
-
+from src.ingest import load_and_parse_source
+from src.parsers.caixabank import (
+    _description_from_cc,
+    _parse_date_cell,
+    parse_caixabank_file,
+)
 
 # ---------------------------------------------------------------------------
 # Unit tests
@@ -120,6 +123,7 @@ def test_xlsx_blank_leading_column(tmp_path: Path) -> None:
 def test_full_ingest_pipeline_caixabank_joint() -> None:
     """Full load_and_parse_source path; skipped if the local file is absent."""
     from pathlib import Path as P
+
     import pytest
     root = P(__file__).resolve().parents[1]
     xls = root / "tmp" / "input" / "caixabank_joint.XLS"

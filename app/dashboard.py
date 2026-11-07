@@ -12,8 +12,8 @@ import streamlit as st
 
 from app._tx_view import enrich_transactions_split
 from app.data_loader import cached_transactions_df, get_config
-from src.config_manager import partner_names
 from src.calculator import share_for_category
+from src.config_manager import partner_names
 from src.database import default_db_path
 from src.reports import COMPENSATION_CATEGORIES, monthly_compensation_report
 

@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import hashlib
 import sqlite3
+from collections import Counter
 from datetime import UTC, datetime
 from pathlib import Path
-from collections import Counter
 from typing import Any
 
 from src.cb_columns import CB_COLUMN_NAMES, CB_DETAIL_COLS

@@ -11,7 +11,6 @@ from src.config_manager import load_config
 from src.database import connect, count_transactions, init_db, reclassify_all
 from src.ingest import import_all_configured
 
-
 ROOT = Path(__file__).resolve().parents[1]
 
 
