@@ -37,6 +37,7 @@ flowchart TB
     REPORTS["reports.py\nmonthly_compensation_report\n(category net incl. refunds,\nplus contributions_comp)"]
     DB["database.py\nSQLite schema, connect/init_db,\ninsert + query helpers, dedup by hash,\nmanual-override pin/release"]
     LOGGER["logger.py\nshared logging setup"]
+    WGUARD["write_guard.py\nrefuses a write target under a code folder"]
     CBCOLS["cb_columns.py\ncb_* column list: single source for\nschema, insert and parser skeleton"]
     subgraph parsers["parsers/"]
       CAIXA["caixabank.py\nauto-detect header row,\nwide/compact XLS(X) layouts"]
@@ -65,6 +66,8 @@ flowchart TB
   INGEST --> REVOLUT
   INGEST --> LOGGER
   DB --> CFGMGR
+  DB --> WGUARD
+  CFGMGR --> WGUARD
   DB --> CBCOLS
   DB --> CLASSIFIER
   CAIXA --> CBCOLS

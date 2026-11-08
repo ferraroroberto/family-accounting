@@ -22,6 +22,7 @@ family-accounting/
 │   ├── ingest.py               # orchestrate parse → classify → insert
 │   ├── reports.py              # monthly compensation report
 │   ├── logger.py               # shared logging setup
+│   ├── write_guard.py          # runtime check that a caller-supplied write path is not under a code folder
 │   └── parsers/                # one module per bank export format (caixabank, revolut)
 │
 ├── scripts/                    # CLI entry points, the gate and the vendored ratchet
