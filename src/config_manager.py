@@ -8,6 +8,8 @@ from typing import Any
 
 from jsonschema import Draft202012Validator
 
+from src.write_guard import outside_code_folders
+
 CONFIG_SCHEMA: dict[str, Any] = {
     "type": "object",
     "required": [
@@ -49,9 +51,8 @@ def load_config(path: Path | None = None) -> dict[str, Any]:
 
 def save_config(data: dict[str, Any], path: Path | None = None) -> None:
     """Validate and write configuration to disk."""
-    p = path or default_config_path()
+    p = outside_code_folders(path or default_config_path())
     Draft202012Validator(CONFIG_SCHEMA).validate(data)
-    # runtime-write-exempt: config.json is the user's saved settings, written where load_config reads it
     with p.open("w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
         f.write("\n")
