@@ -36,6 +36,7 @@ flowchart TB
     CALC["calculator.py\nshare formulas: fixed / income_ratio / blended;\nmonthly_category_compensation"]
     REPORTS["reports.py\nmonthly_compensation_report\n(category net incl. refunds,\nplus contributions_comp)"]
     DB["database.py\nSQLite schema, connect/init_db,\ninsert + query helpers, dedup by hash,\nmanual-override pin/release"]
+    TXSTATE["tx_state.py\nTxState + derive_tx_state: the one place the\nclassification columns become a state;\nreader predicates + ambiguity counts"]
     LOGGER["logger.py\nshared logging setup"]
     WGUARD["write_guard.py\nrefuses a write target under a code folder"]
     CBCOLS["cb_columns.py\ncb_* column list: single source for\nschema, insert and parser skeleton"]
@@ -74,6 +75,10 @@ flowchart TB
   LOADER --> DB
   REPORTS --> CALC
   REPORTS --> CFGMGR
+  REPORTS --> TXSTATE
+  CALC --> TXSTATE
+  TXVIEW --> TXSTATE
+  DASH --> TXSTATE
 
   CFGFILE[("config.json\n(gitignored — personal data;\nconfig.example.json is the neutral template)")]
   CFGMGR <--> CFGFILE
@@ -96,7 +101,7 @@ flowchart TB
   TRIAGE --> CFGMGR
 
   subgraph tests["tests/ — pytest"]
-    TESTFILES["test_calculator · test_classifier · test_database ·\ntest_parsers · test_caixabank_xlsx · test_source_resolution ·\ntest_configuration_keywords · test_integration · test_reports"]
+    TESTFILES["test_calculator · test_classifier · test_database ·\ntest_parsers · test_caixabank_xlsx · test_source_resolution ·\ntest_configuration_keywords · test_integration · test_reports ·\ntest_tx_state · test_tx_characterisation"]
   end
   TESTFILES -.-> corelogic
   TESTFILES -.->|skip if config.json /\nlocal bank files absent| CFGFILE

@@ -16,6 +16,12 @@ from src.calculator import share_for_category
 from src.config_manager import partner_names
 from src.database import default_db_path
 from src.reports import COMPENSATION_CATEGORIES, monthly_compensation_report
+from src.tx_state import (
+    AmbiguousCounts,
+    count_ambiguous,
+    is_partner_contribution,
+    tx_states,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -83,13 +89,33 @@ def _split_joint_frames(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, p
     joint_df = df[df["account_type"] == "joint"].copy()
 
     # Spending = outflows excluding contributions (joint only)
-    contributions_mask = joint_df["category"] == "contribution"
+    contributions_mask = tx_states(joint_df).map(is_partner_contribution).astype(bool)
     expenses = joint_df[(joint_df["amount"] < 0) & ~contributions_mask].copy()
     expenses["amount_abs"] = -expenses["amount"]
 
     # Contribution rows (joint only)
     contrib_df = joint_df[contributions_mask].copy()
     return joint_df, expenses, contrib_df
+
+
+def _ambiguous_notice(counts: AmbiguousCounts) -> str | None:
+    """One line naming the rows whose stored mode is ambiguous, or ``None`` when there are none."""
+    parts: list[str] = []
+    if counts.contribution_without_partner:
+        parts.append(
+            f"{counts.contribution_without_partner} contribution(s) with no partner "
+            "(counted for neither partner)"
+        )
+    if counts.released_not_reclassified:
+        parts.append(
+            f"{counts.released_not_reclassified} released row(s) still carrying the pinned "
+            "category until the next reclassify"
+        )
+    if counts.unknown:
+        parts.append(f"{counts.unknown} row(s) with a classification that fits no known state")
+    if not parts:
+        return None
+    return "Rows with an ambiguous classification (totals unchanged): " + "; ".join(parts) + "."
 
 
 def _render_totals(df: pd.DataFrame, joint_df: pd.DataFrame, expenses: pd.DataFrame) -> None:
@@ -258,6 +284,9 @@ def render() -> None:
 
     joint_df, expenses, contrib_df = _split_joint_frames(df)
     _render_totals(df, joint_df, expenses)
+    notice = _ambiguous_notice(count_ambiguous(tx_states(df)))
+    if notice:
+        st.caption(notice)
 
     pa, pb = partner_names(cfg)
 

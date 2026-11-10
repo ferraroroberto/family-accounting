@@ -13,12 +13,13 @@ import sqlite3
 import pandas as pd
 
 from src.calculator import net_ideal_vs_joint_50_50, share_for_transaction_row
+from src.tx_state import tx_states
 
 
 def load_transactions_df(conn: sqlite3.Connection) -> pd.DataFrame:
     """Load the standard transaction columns from *conn*, ordered by date then id."""
     return pd.read_sql_query(
-        "SELECT id, date, description, amount, category, direction, partner, source, yyyymm, rule, account_type FROM transactions ORDER BY date, id",
+        "SELECT id, date, description, amount, category, direction, partner, manual_override, source, yyyymm, rule, account_type FROM transactions ORDER BY date, id",
         conn,
     )
 
@@ -33,11 +34,10 @@ def enrich_transactions_split(df: pd.DataFrame, cfg: dict) -> pd.DataFrame:
     total_a: list[float] = []
     total_b: list[float] = []
     net: list[float] = []
-    for _, row in df.iterrows():
+    for (_, row), state in zip(df.iterrows(), tx_states(df), strict=True):
         amt = float(row["amount"])
         cat = str(row.get("category") or "other")
-        direction = str(row.get("direction") or "expense")
-        sa, sb = share_for_transaction_row(cfg, cat, direction)
+        sa, sb = share_for_transaction_row(cfg, cat, state)
         pct_a.append(sa)
         pct_b.append(sb)
         abs_amt = abs(amt)

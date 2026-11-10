@@ -8,6 +8,7 @@ import pandas as pd
 
 from src.calculator import monthly_category_compensation
 from src.config_manager import partner_names
+from src.tx_state import is_contribution_direction, is_partner_contribution, tx_states
 
 COMPENSATION_CATEGORIES = ("kids", "food", "health", "house", "equal")
 
@@ -67,27 +68,18 @@ def monthly_compensation_report(
     d["yyyymm"] = pd.to_datetime(d["date"], errors="coerce").dt.strftime("%Y%m")
     d = d.dropna(subset=["yyyymm"])
 
-    # Expense rows: exclude contributions.
+    # Expense rows: exclude every row stored with the contribution direction.
     #
     # Positive amounts are kept so that refunds net against the spending they
     # refund — a `devolucion compra`, a direct-debit `retroc. rec.`, or a
     # `segurcaixa … reembolso` is money coming back on a charge already counted,
     # and dropping it overstates the category. `equal` is unaffected either way
     # (a 50/50 share yields comp = T/2 − T×0.5 = 0 for any total).
-    is_contribution = (
-        (d["category"] == "contribution")
-        if "category" in d.columns
-        else pd.Series(False, index=d.index)
-    )
-    dir_ok = (
-        d["direction"].fillna("expense").astype(str) != "contribution"
-        if "direction" in d.columns
-        else pd.Series(True, index=d.index)
-    )
-    exp = d[dir_ok & ~is_contribution]
+    states = tx_states(d)
+    exp = d[~states.map(is_contribution_direction).astype(bool)]
 
     # Contribution rows
-    contrib = d[is_contribution].copy() if "category" in d.columns else pd.DataFrame()
+    contrib = d[states.map(is_partner_contribution).astype(bool)].copy()
 
     months = sorted(d["yyyymm"].dropna().unique())
 

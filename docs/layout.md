@@ -21,6 +21,7 @@ family-accounting/
 │   ├── cb_columns.py           # the cb_* CaixaBank columns, defined once for schema, insert and parser
 │   ├── ingest.py               # orchestrate parse → classify → insert
 │   ├── reports.py              # monthly compensation report
+│   ├── tx_state.py             # the classification state of a stored transaction: TxState and derive_tx_state
 │   ├── logger.py               # shared logging setup
 │   ├── write_guard.py          # runtime check that a caller-supplied write path is not under a code folder
 │   └── parsers/                # one module per bank export format (caixabank, revolut)
