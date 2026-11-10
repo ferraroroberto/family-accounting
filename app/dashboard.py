@@ -16,6 +16,7 @@ from src.calculator import share_for_category
 from src.config_manager import partner_names
 from src.database import default_db_path
 from src.reports import COMPENSATION_CATEGORIES, monthly_compensation_report
+from src.tx_state import is_partner_contribution, tx_states
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -83,7 +84,7 @@ def _split_joint_frames(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, p
     joint_df = df[df["account_type"] == "joint"].copy()
 
     # Spending = outflows excluding contributions (joint only)
-    contributions_mask = joint_df["category"] == "contribution"
+    contributions_mask = tx_states(joint_df).map(is_partner_contribution).astype(bool)
     expenses = joint_df[(joint_df["amount"] < 0) & ~contributions_mask].copy()
     expenses["amount_abs"] = -expenses["amount"]
 
