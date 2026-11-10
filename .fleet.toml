@@ -144,3 +144,14 @@ why    = "src/database.py is the one SQLite connection helper (default path, row
 enabled    = true
 baseline   = ".runtime-write-ratchet-baseline.json"
 safe_calls = ["outside_code_folders"]
+
+# [[state_machines]] -- a lifecycle declared in one module, so the conventions ratchet's state
+# rules stop reporting that module and keep reporting any other one that re-derives it. The
+# classification mode of a stored transaction is held by five columns (category, direction,
+# rule, partner, manual_override); src/tx_state.py names every state and derives it. Reader
+# modules ask the derived state; docs/tx-state.md has the state table.
+[[state_machines]]
+name   = "tx_classification"
+module = "src/tx_state.py"
+type   = "TxState"
+derive = "derive_tx_state"
