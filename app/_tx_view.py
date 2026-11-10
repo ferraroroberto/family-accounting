@@ -19,7 +19,7 @@ from src.tx_state import tx_states
 def load_transactions_df(conn: sqlite3.Connection) -> pd.DataFrame:
     """Load the standard transaction columns from *conn*, ordered by date then id."""
     return pd.read_sql_query(
-        "SELECT id, date, description, amount, category, direction, partner, source, yyyymm, rule, account_type FROM transactions ORDER BY date, id",
+        "SELECT id, date, description, amount, category, direction, partner, manual_override, source, yyyymm, rule, account_type FROM transactions ORDER BY date, id",
         conn,
     )
 

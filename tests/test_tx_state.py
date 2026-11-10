@@ -9,6 +9,7 @@ from typing import Any
 import pandas as pd
 import pytest
 
+from app.dashboard import _ambiguous_notice
 from src.database import (
     assign_hashes,
     clear_manual_override,
@@ -19,6 +20,7 @@ from src.database import (
     set_manual_override,
 )
 from src.tx_state import (
+    AmbiguousCounts,
     TxState,
     count_ambiguous,
     derive_tx_state,
@@ -236,3 +238,16 @@ def test_pinning_a_contribution_without_a_partner_is_its_own_state(conn: sqlite3
     assert _state_of(conn, tx) is TxState.UNSORTED_JOINT_INFLOW
     assert set_manual_override(conn, tx, "contribution", None)
     assert _state_of(conn, tx) is TxState.PINNED_CONTRIBUTION_NO_PARTNER
+
+
+def test_ambiguous_notice_is_silent_without_ambiguous_rows() -> None:
+    assert _ambiguous_notice(AmbiguousCounts(0, 0, 0)) is None
+
+
+def test_ambiguous_notice_names_each_ambiguity() -> None:
+    text = _ambiguous_notice(AmbiguousCounts(4, 2, 1))
+    assert text is not None
+    assert "4 contribution(s) with no partner" in text
+    assert "2 released row(s)" in text
+    assert "1 row(s)" in text
+    assert "totals unchanged" in text
