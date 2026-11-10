@@ -10,6 +10,7 @@ from src.calculator import (
     share_for_category,
     share_for_transaction_row,
 )
+from src.tx_state import TxState
 
 
 def test_income_ratio_sums_one() -> None:
@@ -37,8 +38,19 @@ def test_share_for_transaction_row_contribution_is_neutral() -> None:
         "income": {"partner_a_net": 80, "partner_b_net": 20},
         "categories": {"other": {"share_formula": "fixed", "share": {"partner_a": 0.3, "partner_b": 0.7}}},
     }
-    a, b = share_for_transaction_row(cfg, "other", "contribution")
+    a, b = share_for_transaction_row(cfg, "other", TxState.UNSORTED_JOINT_INFLOW)
     assert abs(a - 0.5) < 1e-9 and abs(b - 0.5) < 1e-9
+
+
+def test_share_for_transaction_row_uses_the_category_share_outside_the_contribution_direction() -> None:
+    cfg = {
+        "income": {"partner_a_net": 80, "partner_b_net": 20},
+        "categories": {"kids": {"share_formula": "fixed", "share": {"partner_a": 0.3, "partner_b": 0.7}}},
+    }
+    for state in (TxState.RULED, TxState.PINNED, TxState.RELEASED, TxState.PERSONAL_INCOME, TxState.UNKNOWN):
+        assert share_for_transaction_row(cfg, "kids", state) == (0.3, 0.7)
+    for state in (TxState.CONTRIBUTION, TxState.PINNED_CONTRIBUTION_NO_PARTNER, TxState.RELEASED_UNSORTED_JOINT_INFLOW):
+        assert share_for_transaction_row(cfg, "kids", state) == (0.5, 0.5)
 
 
 def test_monthly_compensation_sign() -> None:

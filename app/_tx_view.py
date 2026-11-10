@@ -13,6 +13,7 @@ import sqlite3
 import pandas as pd
 
 from src.calculator import net_ideal_vs_joint_50_50, share_for_transaction_row
+from src.tx_state import tx_states
 
 
 def load_transactions_df(conn: sqlite3.Connection) -> pd.DataFrame:
@@ -33,11 +34,10 @@ def enrich_transactions_split(df: pd.DataFrame, cfg: dict) -> pd.DataFrame:
     total_a: list[float] = []
     total_b: list[float] = []
     net: list[float] = []
-    for _, row in df.iterrows():
+    for (_, row), state in zip(df.iterrows(), tx_states(df), strict=True):
         amt = float(row["amount"])
         cat = str(row.get("category") or "other")
-        direction = str(row.get("direction") or "expense")
-        sa, sb = share_for_transaction_row(cfg, cat, direction)
+        sa, sb = share_for_transaction_row(cfg, cat, state)
         pct_a.append(sa)
         pct_b.append(sb)
         abs_amt = abs(amt)

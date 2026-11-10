@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from src.tx_state import TxState, is_contribution_direction
+
 
 def income_ratio(config: dict[str, Any]) -> tuple[float, float]:
     inc = config.get("income", {})
@@ -61,9 +63,9 @@ def monthly_category_compensation(
 def share_for_transaction_row(
     config: dict[str, Any],
     category: str,
-    direction: str,
+    state: TxState,
 ) -> tuple[float, float]:
-    """Ideal (A, B) shares for expenses by category. Contributions are neutral (50/50), not part of compensation."""
-    if direction == "contribution":
+    """Ideal (A, B) shares for expenses by category. Contribution-direction rows are neutral (50/50), not part of compensation."""
+    if is_contribution_direction(state):
         return 0.5, 0.5
     return share_for_category(config, category)
