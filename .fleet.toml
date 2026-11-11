@@ -112,8 +112,9 @@ baseline = ".comment-ratchet-baseline.json"
 # conventions as stdlib `ast` rules. The gate (scripts/verify-before-ship.ps1) runs
 # scripts/conventions_ratchet.py, which fails when a file's hit count for an enabled rule
 # rises above .conventions-ratchet-baseline.json. Enabled here: no-window (a Windows app
-# spawns no console), logging-not-print (app/ and src/ log through src/logger.py) and
-# no-drive-path (locations come from config.json). secret-compare and git-wrapper are off:
+# spawns no console), logging-not-print (app/ and src/ log through src/logger.py),
+# no-drive-path (locations come from config.json) and subprocess-timeout (a blocking
+# subprocess call passes timeout= so a hung child cannot stall the run). secret-compare and git-wrapper are off:
 # the repo has neither a constant-time-compare helper nor a git wrapper. Existing hits are
 # baselined, never excluded. Exit 3 (git unusable, a .py file that does not parse) fails
 # the gate.
@@ -122,7 +123,7 @@ history_phrases = true
 [conventions_ratchet]
 enabled  = true
 baseline = ".conventions-ratchet-baseline.json"
-rules    = ["no-window", "logging-not-print", "no-drive-path", "state-literal", "state-set-repeat", "state-write"]
+rules    = ["no-window", "logging-not-print", "no-drive-path", "subprocess-timeout", "state-literal", "state-set-repeat", "state-write"]
 
 # A raw connect skips the default database path and the row factory.
 [[conventions_ratchet.must_use]]

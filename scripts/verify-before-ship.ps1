@@ -42,7 +42,8 @@
                              cannot be scanned): a failure, never a pass.
       9. conventions ratchet - scripts/conventions_ratchet.py: fails when a file's hit count
                              for an enabled rule (a spawn without CREATE_NO_WINDOW, a print()
-                             in app/ or src/, a hardcoded drive path) rises above the
+                             in app/ or src/, a hardcoded drive path, a blocking subprocess
+                             call without timeout=) rises above the
                              committed baseline. Exit 3 = "not confirmed" (git unusable, a
                              .py file that does not parse): a failure, never a pass.
      10. runtime write ratchet - scripts/runtime_write_ratchet.py: fails when a Python
