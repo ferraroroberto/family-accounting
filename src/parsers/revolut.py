@@ -63,7 +63,6 @@ def parse_revolut_csv(
                 "amount": amt,
                 "balance": bal,
                 "yyyymm": yyyymm,
-                "extra_json": None,
             }
         )
     return rows

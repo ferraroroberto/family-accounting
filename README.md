@@ -268,7 +268,6 @@ The SQLite database (`data/expenses.db`) contains two tables:
 | `yyyymm` | TEXT | Pre-computed `YYYYMM` for fast grouping |
 | `rule` | TEXT | Matched keyword or `default` |
 | `account_type` | TEXT | `joint` or `personal` — derived from account config |
-| `extra_json` | TEXT | Reserved for future parser metadata |
 | `cb_*` columns | varies | CaixaBank raw fields (NULL for Revolut rows) |
 | `hash` | TEXT UNIQUE | SHA-256 deduplication key: source, day, amount, description, balance and occurrence among tied rows |
 | `created_at` / `updated_at` | TEXT | ISO timestamps |

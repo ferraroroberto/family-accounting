@@ -356,7 +356,6 @@ def _parse_wide_rows(
             "amount": amt,
             "balance": bal,
             "yyyymm": op.strftime("%Y%m"),
-            "extra_json": None,
             **cb,
         })
     return rows
@@ -392,7 +391,6 @@ def _parse_compact_rows(
             "amount": amt,
             "balance": bal,
             "yyyymm": op.strftime("%Y%m"),
-            "extra_json": None,
             **cb_null_row(),
         })
     return rows

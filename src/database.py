@@ -38,7 +38,6 @@ CREATE TABLE IF NOT EXISTS transactions (
     yyyymm          TEXT,
     rule            TEXT DEFAULT 'default',
     account_type    TEXT DEFAULT 'joint',
-    extra_json      TEXT,
 __CB_COLUMNS__
     hash            TEXT UNIQUE NOT NULL,
     created_at      TEXT DEFAULT (datetime('now')),
@@ -74,34 +73,20 @@ def connect(db_path: Path | None = None) -> sqlite3.Connection:
     return conn
 
 
-def _ensure_rule_column(conn: sqlite3.Connection) -> None:
-    cur = conn.execute("PRAGMA table_info(transactions)")
-    cols = {row[1] for row in cur.fetchall()}
-    if "rule" not in cols:
-        conn.execute("ALTER TABLE transactions ADD COLUMN rule TEXT")
+# Columns added after the first release, as (name, ALTER TABLE column definition).
+_ADDED_COLUMNS: tuple[tuple[str, str], ...] = (
+    ("rule", "TEXT"),
+    ("account_type", "TEXT DEFAULT 'joint'"),
+    *CB_DETAIL_COLS,
+)
 
 
-def _ensure_extra_json_column(conn: sqlite3.Connection) -> None:
-    cur = conn.execute("PRAGMA table_info(transactions)")
-    cols = {row[1] for row in cur.fetchall()}
-    if "extra_json" not in cols:
-        conn.execute("ALTER TABLE transactions ADD COLUMN extra_json TEXT")
-
-
-def _ensure_account_type_column(conn: sqlite3.Connection) -> None:
-    cur = conn.execute("PRAGMA table_info(transactions)")
-    cols = {row[1] for row in cur.fetchall()}
-    if "account_type" not in cols:
-        conn.execute("ALTER TABLE transactions ADD COLUMN account_type TEXT DEFAULT 'joint'")
-        conn.execute("UPDATE transactions SET account_type = 'joint' WHERE account_type IS NULL")
-
-
-def _ensure_caixabank_detail_columns(conn: sqlite3.Connection) -> None:
-    cur = conn.execute("PRAGMA table_info(transactions)")
-    cols = {row[1] for row in cur.fetchall()}
-    for name, typ in CB_DETAIL_COLS:
-        if name not in cols:
-            conn.execute("ALTER TABLE transactions ADD COLUMN %s %s" % (name, typ))
+def _ensure_columns(conn: sqlite3.Connection, columns: tuple[tuple[str, str], ...]) -> None:
+    """Add every column of *columns* the transactions table does not have yet."""
+    existing = {row[1] for row in conn.execute("PRAGMA table_info(transactions)")}
+    for name, ddl in columns:
+        if name not in existing:
+            conn.execute(f"ALTER TABLE transactions ADD COLUMN {name} {ddl}")
 
 
 def _migrate_v1_lowercase_descriptions(conn: sqlite3.Connection) -> None:
@@ -142,10 +127,7 @@ def _migrate_v2_balance_keyed_hashes(conn: sqlite3.Connection) -> int:
 def init_db(conn: sqlite3.Connection) -> None:
     conn.executescript(SCHEMA)
     conn.commit()
-    _ensure_rule_column(conn)
-    _ensure_extra_json_column(conn)
-    _ensure_account_type_column(conn)
-    _ensure_caixabank_detail_columns(conn)
+    _ensure_columns(conn, _ADDED_COLUMNS)
     conn.commit()
     ver = conn.execute("PRAGMA user_version").fetchone()[0]
     if ver < 1:
@@ -210,7 +192,7 @@ def assign_hashes(rows: list[dict[str, Any]]) -> None:
 _INSERT_CORE_COLS: tuple[str, ...] = (
     "source", "date", "value_date", "description", "amount", "balance",
     "category", "direction", "partner", "manual_override", "yyyymm", "rule",
-    "account_type", "extra_json",
+    "account_type",
 )
 _INSERT_COLS = (*_INSERT_CORE_COLS, *CB_COLUMN_NAMES, "hash", "updated_at")
 _INSERT_SQL = (
@@ -245,7 +227,6 @@ def insert_transactions(
                     r.get("yyyymm"),
                     r.get("rule", "default"),
                     r.get("account_type", "joint"),
-                    r.get("extra_json"),
                     *(r.get(c) for c in CB_COLUMN_NAMES),
                     h,
                     now,
