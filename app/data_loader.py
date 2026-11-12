@@ -26,8 +26,10 @@ def _db_stamp(db_path: Path) -> int:
     return db_path.stat().st_mtime_ns
 
 
+# `stamp` stays un-prefixed: Streamlit leaves underscore-prefixed parameters out of the cache
+# key, which would key the frames on the path alone and never bust on a CLI import.
 @st.cache_data(show_spinner=False)
-def _cached_transactions(db_path_str: str, _stamp: int) -> tuple[pd.DataFrame, pd.DataFrame]:
+def _cached_transactions(db_path_str: str, stamp: int) -> tuple[pd.DataFrame, pd.DataFrame]:
     conn = connect(Path(db_path_str))
     try:
         init_db(conn)
