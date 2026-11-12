@@ -7,10 +7,9 @@ from typing import Any
 import pandas as pd
 
 from src.calculator import monthly_category_compensation
+from src.classifier import RULE_CATEGORIES
 from src.config_manager import partner_names
 from src.tx_state import is_contribution_direction, is_partner_contribution, tx_states
-
-COMPENSATION_CATEGORIES = ("kids", "food", "health", "house", "equal")
 
 
 def _contributions_comp_for_month(contrib: pd.DataFrame, ym: str) -> float:
@@ -89,7 +88,7 @@ def monthly_compensation_report(
     for ym in months:
         row: dict[str, Any] = {"month": ym}
         total = 0.0
-        for cat in COMPENSATION_CATEGORIES:
+        for cat in RULE_CATEGORIES:
             t = float(exp[(exp["yyyymm"] == ym) & (exp["category"] == cat)]["amount"].sum())
             comp = monthly_category_compensation(t, config, cat)
             row[f"{cat}_comp"] = comp

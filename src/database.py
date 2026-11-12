@@ -22,6 +22,11 @@ def default_db_path() -> Path:
     return project_root() / "data" / "expenses.db"
 
 
+def _utc_now_iso() -> str:
+    """Current UTC time as ``YYYY-MM-DDTHH:MM:SSZ``, the format every ``updated_at`` column stores."""
+    return datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
+
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS transactions (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -91,7 +96,7 @@ def _ensure_columns(conn: sqlite3.Connection, columns: tuple[tuple[str, str], ..
 
 def _migrate_v1_lowercase_descriptions(conn: sqlite3.Connection) -> None:
     """One-time: lowercase descriptions so the canonical hash key is stable."""
-    now = datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
+    now = _utc_now_iso()
     for row in conn.execute("SELECT id, description FROM transactions").fetchall():
         desc = (row["description"] or "").strip().lower()
         conn.execute(
@@ -207,7 +212,7 @@ def insert_transactions(
     """Insert rows; skip duplicates by hash. Returns (added, skipped)."""
     added = 0
     skipped = 0
-    now = datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
+    now = _utc_now_iso()
     for r in rows:
         h = r["hash"]
         try:
@@ -261,7 +266,7 @@ def reclassify_all(
     transitions: Counter[str] = Counter()
     transition_rows: dict[str, list[dict[str, Any]]] = {}
     new_categories: Counter[str] = Counter()
-    now = datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
+    now = _utc_now_iso()
     for row in rows:
         old_cat, old_dir, old_rule = row["category"], row["direction"], row["rule"]
         acct_type = row["account_type"] if row["account_type"] else "joint"
@@ -311,7 +316,7 @@ def set_manual_override(
 
     direction = classify_direction(float(row["amount"]), category, row["account_type"] or "joint")
 
-    now = datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
+    now = _utc_now_iso()
     conn.execute(
         "UPDATE transactions SET category = ?, direction = ?, partner = ?,"
         " rule = 'manual', manual_override = 1, updated_at = ? WHERE id = ?",
@@ -323,7 +328,7 @@ def set_manual_override(
 
 def clear_manual_override(conn: sqlite3.Connection, tx_id: int) -> bool:
     """Release a pinned row so the next reclassification governs it again."""
-    now = datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
+    now = _utc_now_iso()
     cur = conn.execute(
         "UPDATE transactions SET manual_override = 0, updated_at = ?"
         " WHERE id = ? AND manual_override = 1",
@@ -359,7 +364,7 @@ def backfill_account_type_from_config(
     if not source_to_account_type:
         return 0
     updated = 0
-    now = datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
+    now = _utc_now_iso()
     for source_id, account_type in source_to_account_type.items():
         cur = conn.execute(
             "UPDATE transactions SET account_type = ?, updated_at = ?"

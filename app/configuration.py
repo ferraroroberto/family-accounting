@@ -15,6 +15,7 @@ from app.data_loader import (
     clear_data_caches,
     get_config,
 )
+from src.classifier import ALL_CATEGORIES, RULE_CATEGORIES
 from src.config_manager import (
     default_config_path,
     load_config,
@@ -29,9 +30,6 @@ from src.database import (
     set_manual_override,
 )
 from src.ingest import reclassify_database
-
-_RULE_KEYS = ("kids", "food", "health", "house", "equal")
-_ALL_CATEGORIES = ("kids", "food", "health", "house", "equal", "contribution", "other")
 
 # Rows shown in the filtered transaction tables (newest first).
 _TABLE_ROW_CAP = 500
@@ -72,7 +70,7 @@ def _render_manual_override(candidates: pd.DataFrame) -> None:
         )
         oc1, oc2, oc3 = st.columns([2, 2, 1])
         with oc1:
-            new_cat = st.selectbox("Set category to", _ALL_CATEGORIES, key="cfg_override_cat")
+            new_cat = st.selectbox("Set category to", ALL_CATEGORIES, key="cfg_override_cat")
         with oc2:
             partner = st.selectbox(
                 "Attribute to partner",
@@ -217,7 +215,7 @@ def _save_keywords(
     base = load_config(cfg_path)
     cr = base.setdefault(rules_key, {})
     stats: dict[str, dict[str, object]] = {}
-    for key in _RULE_KEYS:
+    for key in RULE_CATEGORIES:
         prev_block = cr.get(key) or {}
         raw_prev = prev_block.get("keywords")
         prev_kws = raw_prev if isinstance(raw_prev, list) else []
@@ -251,7 +249,7 @@ def _save_keywords(
 def _render_keyword_save_stats(kw_stats: dict[str, dict[str, object]]) -> None:
     cfg_labels = get_config()
     st.caption("Last save: keyword changes")
-    for key in _RULE_KEYS:
+    for key in RULE_CATEGORIES:
         label = cfg_labels.get("categories", {}).get(key, {}).get("label", key)
         d = kw_stats[key]
         dup_list = d["duplicates_skipped"]
@@ -286,13 +284,13 @@ def _render_keyword_editor(
     )
 
     defaults: dict[str, str] = {}
-    for key in _RULE_KEYS:
+    for key in RULE_CATEGORIES:
         block = rules.get(key) or {}
         kws = block.get("keywords") or []
         defaults[key] = _keywords_to_text(kws if isinstance(kws, list) else [])
 
     widgets: dict[str, str] = {}
-    for key in _RULE_KEYS:
+    for key in RULE_CATEGORIES:
         label = cfg.get("categories", {}).get(key, {}).get("label", key)
         widgets[key] = st.text_area(
             f"{label} (`{key}`)",

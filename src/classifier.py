@@ -4,6 +4,11 @@ from __future__ import annotations
 
 from typing import Any
 
+# Keyword-rule categories in match priority order (first hit wins); the report, the
+# Configuration editor and the triage CLI all iterate this one tuple.
+RULE_CATEGORIES = ("kids", "food", "health", "house", "equal")
+ALL_CATEGORIES = (*RULE_CATEGORIES, "contribution", "other")
+
 
 def _match_keyword(description: str, keyword: str, case_sensitive: bool) -> bool:
     if not keyword:
@@ -88,8 +93,7 @@ def classify_description(
     """
     desc = description or ""
     rules = config.get(rules_key, {})
-    order = ["kids", "food", "health", "house", "equal"]
-    for cat in order:
+    for cat in RULE_CATEGORIES:
         block = rules.get(cat) or {}
         keywords = block.get("keywords") or []
         case_sensitive = bool(block.get("case_sensitive", False))

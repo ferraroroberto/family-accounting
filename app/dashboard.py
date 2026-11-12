@@ -13,9 +13,10 @@ import streamlit as st
 from app._tx_view import enrich_transactions_split
 from app.data_loader import cached_transactions_df, get_config
 from src.calculator import share_for_category
+from src.classifier import RULE_CATEGORIES
 from src.config_manager import partner_names
 from src.database import default_db_path
-from src.reports import COMPENSATION_CATEGORIES, monthly_compensation_report
+from src.reports import monthly_compensation_report
 from src.tx_state import (
     AmbiguousCounts,
     count_ambiguous,
@@ -145,7 +146,7 @@ def _render_share_cards(
     )
 
     # Show kids, food, health, house cards + contributions card (replaces equal card)
-    display_cats = [c for c in COMPENSATION_CATEGORIES if c != "equal"]
+    display_cats = [c for c in RULE_CATEGORIES if c != "equal"]
     ratio_cols = st.columns(len(display_cats) + 1)
 
     for i, cat in enumerate(display_cats):
@@ -209,7 +210,7 @@ def _render_monthly_compensation(
 
     disp = rep.sort_values("month", ascending=False).copy()
     disp["month"] = disp["month"].map(_format_yyyymm)
-    comp_cols_to_format = [f"{c}_comp" for c in COMPENSATION_CATEGORIES] + [
+    comp_cols_to_format = [f"{c}_comp" for c in RULE_CATEGORIES] + [
         "contributions_comp",
         "total_comp",
         "total_comp_cumulative",
@@ -293,7 +294,7 @@ def render() -> None:
     rep = monthly_compensation_report(joint_df, cfg)
 
     comp_cat_labels = " · ".join(
-        cfg.get("categories", {}).get(c, {}).get("label", c) for c in COMPENSATION_CATEGORIES
+        cfg.get("categories", {}).get(c, {}).get("label", c) for c in RULE_CATEGORIES
     )
     accent = _read_accent_hex()
 

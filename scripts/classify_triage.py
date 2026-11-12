@@ -23,9 +23,8 @@ import sqlite3
 import sys
 from typing import Any
 
+from src.classifier import RULE_CATEGORIES
 from src.database import connect, default_db_path
-
-COMPENSATION_CATEGORIES = ("kids", "food", "health", "house", "equal")
 
 
 def _rows(conn: sqlite3.Connection) -> list[tuple[str, str, float, str]]:
@@ -60,7 +59,7 @@ def summary(conn: sqlite3.Connection, account: str, since: str | None) -> None:
     ).fetchone()
     cls = conn.execute(
         f"SELECT COALESCE(ROUND(SUM(amount), 2), 0) t FROM transactions"
-        f" WHERE {where} AND category IN {COMPENSATION_CATEGORIES} AND amount < 0",
+        f" WHERE {where} AND category IN {RULE_CATEGORIES} AND amount < 0",
         params,
     ).fetchone()["t"]
 
