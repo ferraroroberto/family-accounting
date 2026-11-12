@@ -269,3 +269,63 @@ def test_manual_override_direction_matches_the_classifier(tmp_path) -> None:
         got = conn.execute("SELECT direction FROM transactions WHERE id = ?", (tx_id,)).fetchone()["direction"]
         assert got == classify_direction(amount, category, acct)
     conn.close()
+
+
+_LEGACY_SCHEMA = """
+CREATE TABLE transactions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, source TEXT NOT NULL, date TEXT NOT NULL,
+    value_date TEXT, description TEXT NOT NULL, amount REAL NOT NULL, balance REAL,
+    category TEXT DEFAULT 'other', direction TEXT DEFAULT 'expense', partner TEXT,
+    manual_override INTEGER DEFAULT 0, yyyymm TEXT, extra_json TEXT,
+    hash TEXT UNIQUE NOT NULL, created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+);
+"""
+
+
+def test_init_db_upgrades_a_legacy_table_in_one_pass(tmp_path) -> None:
+    """A table from before rule, account_type and the cb_* columns gains all of them, data intact."""
+    from src.cb_columns import CB_COLUMN_NAMES
+    from src.database import connect, init_db, transaction_hash
+
+    conn = connect(tmp_path / "legacy.db")
+    conn.executescript(_LEGACY_SCHEMA)
+    conn.execute("PRAGMA user_version = 2")
+    h = transaction_hash("cb", "2024-01-05", -10.0, "coffee", "n#0")
+    conn.execute(
+        "INSERT INTO transactions (source, date, description, amount, hash)"
+        " VALUES ('cb', '2024-01-05', 'coffee', -10.0, ?)",
+        (h,),
+    )
+    conn.commit()
+
+    init_db(conn)
+    init_db(conn)  # idempotent
+
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(transactions)")}
+    assert {"rule", "account_type", *CB_COLUMN_NAMES} <= cols
+    row = conn.execute("SELECT rule, account_type, cb_oficina FROM transactions").fetchone()
+    assert (row["rule"], row["account_type"], row["cb_oficina"]) == ("default", "joint", None)
+    conn.close()
+
+
+def test_new_schema_has_no_extra_json_and_a_legacy_one_still_accepts_inserts(tmp_path) -> None:
+    """Nothing writes extra_json: a fresh DB omits it, an old DB keeps the unused NULL column."""
+    from src.database import connect, init_db, insert_transactions
+
+    row = {
+        "source": "cb", "date": "2024-01-05", "description": "coffee", "amount": -10.0,
+        "hash": "h1",
+    }
+    fresh = connect(tmp_path / "fresh.db")
+    init_db(fresh)
+    assert "extra_json" not in {r[1] for r in fresh.execute("PRAGMA table_info(transactions)")}
+    assert insert_transactions(fresh, [row]) == (1, 0)
+    fresh.close()
+
+    legacy = connect(tmp_path / "legacy.db")
+    legacy.executescript(_LEGACY_SCHEMA)
+    init_db(legacy)
+    assert insert_transactions(legacy, [row]) == (1, 0)
+    assert legacy.execute("SELECT extra_json FROM transactions").fetchone()[0] is None
+    legacy.close()
