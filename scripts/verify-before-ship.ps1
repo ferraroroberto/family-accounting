@@ -46,11 +46,17 @@
                              call without timeout=) rises above the
                              committed baseline. Exit 3 = "not confirmed" (git unusable, a
                              .py file that does not parse): a failure, never a pass.
-     10. runtime write ratchet - scripts/runtime_write_ratchet.py: fails when a Python
+     10. request budget ratchet - scripts/request_budget_ratchet.py: fails when a file's
+                             count for a polling or background-loop rule (a fixed-rate
+                             poll, a poll under 2 s, a short unwatched server loop, a
+                             default-pool call, a missing timing middleware) rises above
+                             the committed baseline. Exit 3 = "not confirmed" (git
+                             unusable, a file that cannot be read): a failure, never a pass.
+     11. runtime write ratchet - scripts/runtime_write_ratchet.py: fails when a Python
                              file gains a write target resolving under a code folder
                              beyond the committed baseline. Exit 3 = "not confirmed" (a
                              new target it cannot resolve): a failure, never a pass.
-     11. pytest            - the unit suite, bracketed by the runtime write probe
+     12. pytest           - the unit suite, bracketed by the runtime write probe
                              (--snapshot before, --probe after): fails on any untracked
                              or ignored file the tests left under a code folder
 
@@ -94,6 +100,7 @@ Invoke-Stage "static ratchet" { & $py "scripts/static_ratchet.py" }
 Invoke-Stage "docs ratchet" { & $py "scripts/docs_ratchet.py" }
 Invoke-Stage "comment ratchet" { & $py "scripts/comment_ratchet.py" }
 Invoke-Stage "conventions ratchet" { & $py "scripts/conventions_ratchet.py" }
+Invoke-Stage "request budget ratchet" { & $py "scripts/request_budget_ratchet.py" }
 Invoke-Stage "runtime write ratchet" { & $py "scripts/runtime_write_ratchet.py" }
 # Runtime write probe, first half: what already sits untracked or ignored under
 # the code folders, so the probe after the tests names only what they wrote.
