@@ -39,7 +39,8 @@ family-accounting/
 │   ├── comment_ratchet.py      # vendored likewise; flags issue references in comments against .comment-ratchet-baseline.json
 │   ├── conventions_ratchet.py  # vendored likewise; flags the enabled convention rules (the `rules` list in .fleet.toml) against .conventions-ratchet-baseline.json
 │   ├── runtime_write_ratchet.py # vendored likewise; flags write targets under a code folder against .runtime-write-ratchet-baseline.json and probes what the tests leave behind
-│   └── (helper modules)        # vendored modules the ratchets import (structure_*, conventions_*, runtime_write_resolve, instruction_*) and box_lock_gate.ps1; re-vendor, never edit
+│   ├── request_budget_ratchet.py # vendored likewise; flags polling and background-loop waste against .request-budget-ratchet-baseline.json
+│   └── (helper modules)        # vendored modules the ratchets import (structure_*, conventions_*, request_budget_scan, runtime_write_resolve, instruction_*) and box_lock_gate.ps1; re-vendor, never edit
 │
 ├── tests/                      # pytest suite, one test module per src/ or app/ concern
 └── docs/                       # durable reference: this file and architecture.mmd
@@ -72,6 +73,7 @@ None: `.structure-ratchet-baseline.json` is empty, so every file, function and d
 .\.venv\Scripts\python.exe scripts\docs_ratchet.py
 .\.venv\Scripts\python.exe scripts\comment_ratchet.py
 .\.venv\Scripts\python.exe scripts\conventions_ratchet.py
+.\.venv\Scripts\python.exe scripts\request_budget_ratchet.py
 .\.venv\Scripts\python.exe scripts\runtime_write_ratchet.py
 powershell -File scripts/verify-before-ship.ps1
 ```
